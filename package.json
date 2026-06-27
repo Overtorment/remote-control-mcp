@@ -1,0 +1,19 @@
+{
+	"name": "electrobun-photo-booth",
+	"version": "1.0.0",
+	"description": "A desktop screen capture app built with Electrobun",
+	"scripts": {
+		"start": "electrobun dev",
+		"dev": "electrobun dev --watch",
+		"build:canary": "electrobun build --env=canary"
+	},
+	"dependencies": {
+		"@modelcontextprotocol/sdk": "^1.29.0",
+		"buffer": "6.0.3",
+		"electrobun": "1.18.1",
+		"zod": "^3.25.76"
+	},
+	"devDependencies": {
+		"@types/bun": "latest"
+	}
+}
