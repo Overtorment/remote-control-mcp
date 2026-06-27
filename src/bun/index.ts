@@ -1,9 +1,4 @@
-import {
-	BrowserWindow,
-	BrowserView,
-	Utils,
-	type RPCSchema,
-} from "electrobun/bun";
+import { BrowserWindow, BrowserView, type RPCSchema } from "electrobun/bun";
 import { mkdirSync } from "node:fs";
 import {
 	VirtualMouse,
@@ -76,23 +71,20 @@ const virtualKeyboard = new VirtualKeyboard();
 export type PhotoBoothRPC = {
 	bun: RPCSchema<{
 		requests: {
-			savePhoto: {
-				params: {
-					dataUrl: string;
-					filename: string;
-				};
-				response: {
-					success: boolean;
-					path?: string;
-					reason?: string;
-					error?: string;
-				};
-			};
 			getScreenSize: {
 				params: {};
 				response: {
 					width: number;
 					height: number;
+				};
+			};
+			setCaptureResolution: {
+				params: {
+					width: number;
+					height: number;
+				};
+				response: {
+					success: boolean;
 				};
 			};
 			simulateClick: {
@@ -162,46 +154,18 @@ const photoBoothRPC = BrowserView.defineRPC<PhotoBoothRPC>({
 	maxRequestTime: 120000,
 	handlers: {
 		requests: {
-			savePhoto: async ({ dataUrl, filename }) => {
-				try {
-					// Convert data URL to buffer
-					const base64Data = dataUrl.replace(/^data:image\/\w+;base64,/, "");
-					const buffer = Buffer.from(base64Data, "base64");
-
-					// Show save dialog using Utils
-					const chosenPaths = await Utils.openFileDialog({
-						startingFolder: Bun.env["HOME"] || "/",
-						allowedFileTypes: "png",
-						canChooseFiles: false,
-						canChooseDirectory: true,
-						allowsMultipleSelection: false,
-					});
-
-					if (chosenPaths[0] && chosenPaths[0] !== "") {
-						const savePath = `${chosenPaths[0]}/${filename}`;
-
-						// Save the file
-						await Bun.write(savePath, buffer);
-
-						return {
-							success: true,
-							path: savePath,
-						};
-					} else {
-						return {
-							success: false,
-							reason: "canceled",
-						};
-					}
-				} catch (error) {
-					console.error("Error saving photo:", error);
-					return {
-						success: false,
-						error: (error as Error).message,
-					};
-				}
-			},
 			getScreenSize: async () => virtualMouse.resolution,
+			// Align the virtual mouse's absolute axis range with the live screen-
+			// capture resolution. libinput normalizes a uinput abs device's
+			// [0, max] range onto the full output, so by matching the range to the
+			// exact pixel space the agent sees in screenshots, click coordinates
+			// map 1:1 regardless of any capture downscaling.
+			setCaptureResolution: async ({ width, height }) => {
+				if (width > 0 && height > 0) {
+					virtualMouse.setResolution(Math.round(width), Math.round(height));
+				}
+				return { success: true };
+			},
 			getClickStatus: async () => ({ writable: uinputWritable() }),
 			ensureClickPermission: async () => ensureUinputAccess(),
 			typeText: async ({ text }) => {

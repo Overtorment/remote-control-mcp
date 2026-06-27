@@ -25,24 +25,13 @@ const rpc = Electroview.defineRPC<PhotoBoothRPC>({
 
 const electrobun = new Electrobun.Electroview({ rpc });
 
-interface Screenshot {
-	id: string;
-	dataUrl: string;
-	timestamp: Date;
-}
-
 class ScreenCaptureApp {
 	private video: HTMLVideoElement;
 	private canvas: HTMLCanvasElement;
-	private captureBtn: HTMLButtonElement;
-	private gallery: HTMLElement;
-	private timerToggle: HTMLInputElement;
 	private selectScreenBtn: HTMLButtonElement;
+	private stopBtn: HTMLButtonElement;
 	private status: HTMLElement;
 	private statusText: HTMLElement;
-	private countdown: HTMLElement;
-	private modal: HTMLElement;
-	private modalImage: HTMLImageElement;
 
 	private clickXInput: HTMLInputElement;
 	private clickYInput: HTMLInputElement;
@@ -64,8 +53,6 @@ class ScreenCaptureApp {
 	private keyResult: HTMLElement;
 
 	private stream: MediaStream | null = null;
-	private screenshots: Screenshot[] = [];
-	private currentScreenshotId: string | null = null;
 
 	/** Fired after the user grants screen-share consent. */
 	onShareStarted?: () => void;
@@ -75,21 +62,12 @@ class ScreenCaptureApp {
 	constructor() {
 		this.video = document.getElementById("video") as HTMLVideoElement;
 		this.canvas = document.getElementById("canvas") as HTMLCanvasElement;
-		this.captureBtn = document.getElementById(
-			"captureBtn",
-		) as HTMLButtonElement;
-		this.gallery = document.getElementById("gallery") as HTMLElement;
-		this.timerToggle = document.getElementById(
-			"timerToggle",
-		) as HTMLInputElement;
 		this.selectScreenBtn = document.getElementById(
 			"selectScreenBtn",
 		) as HTMLButtonElement;
+		this.stopBtn = document.getElementById("stopBtn") as HTMLButtonElement;
 		this.status = document.getElementById("status") as HTMLElement;
 		this.statusText = this.status.querySelector(".status-text") as HTMLElement;
-		this.countdown = document.getElementById("countdown") as HTMLElement;
-		this.modal = document.getElementById("photoModal") as HTMLElement;
-		this.modalImage = document.getElementById("modalImage") as HTMLImageElement;
 		this.clickXInput = document.getElementById("clickX") as HTMLInputElement;
 		this.clickYInput = document.getElementById("clickY") as HTMLInputElement;
 		this.clickButtonSelect = document.getElementById(
@@ -134,24 +112,10 @@ class ScreenCaptureApp {
 	}
 
 	private initializeEventListeners() {
-		this.captureBtn.addEventListener("click", () => this.captureScreenshot());
 		this.selectScreenBtn.addEventListener("click", () => this.selectScreen());
-
-		document
-			.getElementById("modalClose")
-			?.addEventListener("click", () => this.closeModal());
-		document
-			.getElementById("downloadBtn")
-			?.addEventListener("click", () => this.saveCurrentScreenshot());
-		document
-			.getElementById("deleteBtn")
-			?.addEventListener("click", () => this.deleteCurrentScreenshot());
-
-		this.modal.addEventListener("click", (e) => {
-			if (e.target === this.modal) {
-				this.closeModal();
-			}
-		});
+		this.stopBtn.addEventListener("click", () =>
+			this.endShare("Remote stopped"),
+		);
 
 		this.simulateClickBtn.addEventListener("click", () =>
 			this.simulateClick(),
@@ -396,20 +360,22 @@ class ScreenCaptureApp {
 			});
 
 			this.video.srcObject = this.stream;
-			this.setStatus("Screen capture active - ready to take screenshots", true);
-			this.captureBtn.disabled = false;
+			this.setStatus("Screen capture active - remote control enabled", true);
 			this.selectScreenBtn.style.display = "none";
+			this.stopBtn.style.display = "flex";
 
 			const videoTracks = this.stream.getVideoTracks();
 			if (videoTracks.length > 0) {
-				videoTracks[0].addEventListener("ended", () => {
-					this.setStatus("Screen sharing stopped", false);
-					this.captureBtn.disabled = true;
-					this.selectScreenBtn.style.display = "flex";
-					this.stream = null;
-					this.onShareEnded?.();
-				});
+				// Fires when the user stops sharing via the OS/browser UI.
+				videoTracks[0].addEventListener("ended", () =>
+					this.endShare("Screen sharing stopped"),
+				);
 			}
+
+			// Align the click coordinate space with the actual capture resolution
+			// BEFORE the tunnel goes live, so the very first agent click is correct.
+			await this.waitForVideoMetadata();
+			await this.syncCaptureResolution();
 
 			// Screen consent granted — start the remote tunnel (it's useless
 			// without screenshots, so the two are tied to one action).
@@ -423,49 +389,57 @@ class ScreenCaptureApp {
 		}
 	}
 
-	private async captureScreenshot() {
-		if (!this.stream) {
-			this.setStatus(
-				"No screen capture stream available. Select a screen first.",
-				false,
-			);
-			return;
-		}
+	// Stop reading the screen and tear down the tunnel. Safe to call whether the
+	// stop was user-initiated (Stop button) or external (OS "stop sharing").
+	private endShare(message: string) {
+		if (!this.stream) return;
+		this.stopStream();
+		this.setStatus(message, false);
+		this.selectScreenBtn.style.display = "flex";
+		this.stopBtn.style.display = "none";
+		this.onShareEnded?.();
+	}
 
-		try {
-			if (this.timerToggle.checked) {
-				await this.showCountdown();
-			}
-
-			const context = this.canvas.getContext("2d");
-			if (!context) return;
-
-			this.canvas.width = this.video.videoWidth;
-			this.canvas.height = this.video.videoHeight;
-			context.drawImage(this.video, 0, 0);
-
-			const dataUrl = this.canvas.toDataURL("image/png");
-
-			const screenshot: Screenshot = {
-				id: Date.now().toString(),
-				dataUrl,
-				timestamp: new Date(),
+	// Resolve once the captured video has real dimensions (or after a timeout).
+	private waitForVideoMetadata(): Promise<void> {
+		if (this.video.videoWidth > 0) return Promise.resolve();
+		return new Promise((resolve) => {
+			const done = () => {
+				this.video.removeEventListener("loadedmetadata", done);
+				clearTimeout(timer);
+				resolve();
 			};
+			const timer = setTimeout(done, 2000);
+			this.video.addEventListener("loadedmetadata", done);
+		});
+	}
 
-			this.screenshots.push(screenshot);
-			this.addScreenshotToGallery(screenshot);
-			this.setStatus("Screenshot captured!", true);
-			this.playCaptureFeedback();
+	// Tell the Bun process to map the virtual mouse onto the exact pixel space we
+	// capture, so screenshot coordinates and click coordinates are identical.
+	private async syncCaptureResolution() {
+		const width = this.video.videoWidth;
+		const height = this.video.videoHeight;
+		if (!width || !height) return;
+		try {
+			await electrobun.rpc!.request.setCaptureResolution({ width, height });
+			this.screenSizeLabel.textContent = `${width} x ${height}`;
+			this.clickXInput.max = String(width - 1);
+			this.clickYInput.max = String(height - 1);
 		} catch (error) {
-			console.error("Error capturing screenshot:", error);
-			this.setStatus(`Screenshot failed: ${(error as Error).message}`, false);
+			console.error("Failed to sync capture resolution:", error);
 		}
 	}
 
-	/** Capture the current shared-screen frame as a base64 PNG (no data: prefix). */
-	async captureScreenshotBase64(): Promise<{
+	/**
+	 * Capture the current shared-screen frame as a base64 PNG (no data: prefix).
+	 * When `grid` is true (default) a labeled coordinate grid is drawn on top so
+	 * vision agents can read off target pixel coordinates instead of guessing.
+	 */
+	async captureScreenshotBase64(grid = true): Promise<{
 		ok: boolean;
 		base64?: string;
+		width?: number;
+		height?: number;
 		error?: string;
 	}> {
 		if (!this.stream) {
@@ -480,147 +454,72 @@ class ScreenCaptureApp {
 			if (!context) {
 				return { ok: false, error: "Canvas 2D context unavailable" };
 			}
-			this.canvas.width = this.video.videoWidth;
-			this.canvas.height = this.video.videoHeight;
+			const width = this.video.videoWidth;
+			const height = this.video.videoHeight;
+			this.canvas.width = width;
+			this.canvas.height = height;
 			context.drawImage(this.video, 0, 0);
+			if (grid) this.drawCoordinateGrid(context, width, height);
 			const dataUrl = this.canvas.toDataURL("image/png");
 			const base64 = dataUrl.replace(/^data:image\/\w+;base64,/, "");
-			return { ok: true, base64 };
+			return { ok: true, base64, width, height };
 		} catch (error) {
 			return { ok: false, error: (error as Error).message };
 		}
 	}
 
-	private async showCountdown() {
-		for (let i = 3; i > 0; i--) {
-			this.countdown.textContent = i.toString();
-			this.countdown.style.display = "flex";
-			await new Promise((resolve) => setTimeout(resolve, 1000));
-		}
-		this.countdown.style.display = "none";
-	}
+	// Draw a pixel-coordinate grid over the screenshot. Lines every 100px (bolder
+	// every 500px), labeled along all four edges in the same pixel space used for
+	// clicks — this dramatically improves coordinate estimation accuracy.
+	private drawCoordinateGrid(
+		ctx: CanvasRenderingContext2D,
+		width: number,
+		height: number,
+	) {
+		const step = 100;
+		ctx.save();
+		ctx.font = "bold 13px monospace";
+		ctx.textBaseline = "top";
 
-	private playCaptureFeedback() {
-		document.body.style.backgroundColor = "white";
-		setTimeout(() => {
-			document.body.style.backgroundColor = "";
-		}, 100);
-	}
+		const label = (text: string, x: number, y: number) => {
+			ctx.lineWidth = 3;
+			ctx.strokeStyle = "rgba(0, 0, 0, 0.75)";
+			ctx.strokeText(text, x, y);
+			ctx.fillStyle = "rgba(255, 235, 59, 0.95)";
+			ctx.fillText(text, x, y);
+		};
 
-	private addScreenshotToGallery(screenshot: Screenshot) {
-		const emptyState = this.gallery.querySelector(".empty-state");
-		if (emptyState) {
-			emptyState.remove();
-		}
-
-		const item = document.createElement("div");
-		item.className = "photo-item";
-		item.dataset["photoId"] = screenshot.id;
-
-		item.innerHTML = `
-            <img src="${screenshot.dataUrl}" alt="Captured screenshot">
-            <div class="photo-info">
-                <span class="photo-type">🖥️</span>
-                <span class="photo-time">${screenshot.timestamp.toLocaleTimeString()}</span>
-            </div>
-        `;
-
-		item.addEventListener("click", () => this.openModal(screenshot.id));
-		this.gallery.insertBefore(item, this.gallery.firstChild);
-	}
-
-	private openModal(screenshotId: string) {
-		const screenshot = this.screenshots.find((s) => s.id === screenshotId);
-		if (!screenshot) return;
-
-		this.currentScreenshotId = screenshotId;
-		this.modalImage.src = screenshot.dataUrl;
-		this.modal.style.display = "flex";
-	}
-
-	private closeModal() {
-		this.modal.style.display = "none";
-		this.currentScreenshotId = null;
-	}
-
-	private async saveCurrentScreenshot() {
-		if (!this.currentScreenshotId) return;
-
-		const screenshot = this.screenshots.find(
-			(s) => s.id === this.currentScreenshotId,
-		);
-		if (!screenshot) return;
-
-		try {
-			const filename = `screenshot-${new Date().toISOString().slice(0, 19).replace(/[:.]/g, "-")}.png`;
-			const result = await electrobun.rpc!.request.savePhoto({
-				dataUrl: screenshot.dataUrl,
-				filename,
-			});
-
-			if (result.success) {
-				this.showStatus("Screenshot saved successfully!", "success");
-				if (result.path) {
-					console.log("Screenshot saved to:", result.path);
-				}
-			} else if (result.reason === "canceled") {
-				this.showStatus("Save canceled", "info");
-			} else {
-				this.showStatus("Failed to save screenshot", "error");
-			}
-		} catch (error) {
-			console.error("Error saving screenshot:", error);
-			this.showStatus("Error saving screenshot", "error");
-		}
-	}
-
-	private deleteCurrentScreenshot() {
-		if (!this.currentScreenshotId) return;
-
-		const index = this.screenshots.findIndex(
-			(s) => s.id === this.currentScreenshotId,
-		);
-		if (index === -1) return;
-
-		this.screenshots.splice(index, 1);
-
-		const element = this.gallery.querySelector(
-			`[data-photo-id="${this.currentScreenshotId}"]`,
-		);
-		if (element) {
-			element.remove();
+		for (let x = step; x < width; x += step) {
+			ctx.lineWidth = 1;
+			ctx.strokeStyle =
+				x % 500 === 0 ? "rgba(255, 0, 0, 0.55)" : "rgba(255, 0, 0, 0.28)";
+			ctx.beginPath();
+			ctx.moveTo(x, 0);
+			ctx.lineTo(x, height);
+			ctx.stroke();
+			label(String(x), x + 2, 2);
+			label(String(x), x + 2, height - 16);
 		}
 
-		if (this.screenshots.length === 0) {
-			this.gallery.innerHTML = `
-                <div class="empty-state">
-                    No screenshots yet. Select a screen and click capture to get started!
-                </div>
-            `;
+		for (let y = step; y < height; y += step) {
+			ctx.lineWidth = 1;
+			ctx.strokeStyle =
+				y % 500 === 0 ? "rgba(255, 0, 0, 0.55)" : "rgba(255, 0, 0, 0.28)";
+			ctx.beginPath();
+			ctx.moveTo(0, y);
+			ctx.lineTo(width, y);
+			ctx.stroke();
+			label(String(y), 2, y + 2);
+			label(String(y), width - 42, y + 2);
 		}
 
-		this.closeModal();
-		this.showStatus("Screenshot deleted", "info");
+		ctx.restore();
 	}
 
 	private setStatus(message: string, active: boolean, error: boolean = false) {
 		this.statusText.textContent = message;
 		this.status.classList.toggle("active", active && !error);
 		this.status.classList.toggle("error", error);
-	}
-
-	private showStatus(message: string, type: "success" | "error" | "info") {
-		console.log(`[${type}] ${message}`);
-
-		const originalText = this.statusText.textContent;
-		const originalClasses = this.status.className;
-
-		this.setStatus(message, type === "success", type === "error");
-
-		setTimeout(() => {
-			this.statusText.textContent = originalText;
-			this.status.className = originalClasses;
-		}, 3000);
 	}
 }
 
@@ -661,7 +560,8 @@ class McpPanel {
 	private buildDeps(): RemoteControlDeps {
 		return {
 			getScreenSize: () => electrobun.rpc!.request.getScreenSize({}),
-			screenshot: () => this.app.captureScreenshotBase64(),
+			screenshot: (grid?: boolean) =>
+				this.app.captureScreenshotBase64(grid ?? true),
 			click: (x: number, y: number, button: MouseButton) =>
 				electrobun.rpc!.request.simulateClick({ x, y, button }),
 			typeText: (text: string) => electrobun.rpc!.request.typeText({ text }),

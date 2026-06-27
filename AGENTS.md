@@ -130,6 +130,25 @@ doesn't move → the click lands wherever the physical mouse left it. Fix (alrea
 the exact target**, forcing a real delta every time, plus ~40ms settle before the
 button press. Don't "simplify" this back into a single emit.
 
+### 3b. Click coordinate space is unified to the CAPTURE resolution (don't break this)
+Vision agents misclick when the screenshot they see and the click space differ.
+Browsers frequently **downscale** `getDisplayMedia` video (e.g. a 1920×1200 desktop
+captured as ~1422×888), which silently offsets every click. Fix in place:
+- The agent works entirely in **screenshot pixel space**. `screenshot`,
+  `get_screen_size`, and `click` all share that one space.
+- On share start, the webview reads `video.videoWidth/Height` and calls RPC
+  `setCaptureResolution`, which sets the `VirtualMouse` absolute axis range to those
+  dims. libinput **normalizes** a uinput abs device's `[0, max]` range onto the full
+  output, so matching the range to the captured pixel space makes clicks land 1:1
+  regardless of downscaling. (This is why the abs max value need not equal the real
+  screen pixels — see gotcha #3.)
+- `screenshot` draws a **labeled coordinate grid** (every 100px, bold every 500px,
+  `ScreenCaptureApp.drawCoordinateGrid`) and returns the image dims as a text block.
+  The MCP instructions tell the agent to READ coordinates off the grid and to
+  screenshot-verify after clicking. Pass `grid:false` for a clean image.
+Don't reintroduce a second coordinate system (e.g. clicking against xrandr dims while
+screenshotting the video frame) — that's the original misclick bug.
+
 ### 4. RPC `maxRequestTime` is 120s (not the default)
 `typeText` uses **human-like randomized delays** between keystrokes
 (`humanKeyDelay`), so long strings can take many seconds. The RPC timeout in

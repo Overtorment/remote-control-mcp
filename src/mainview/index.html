@@ -21,43 +21,26 @@
                 <div class="video-container">
                     <video id="video" autoplay playsinline></video>
                     <canvas id="canvas" style="display: none;"></canvas>
-                    <div class="countdown" id="countdown"></div>
                 </div>
-                
+
                 <div class="controls">
-                    <button id="captureBtn" class="capture-btn" disabled>
-                        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <button id="selectScreenBtn" class="select-screen-btn">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                             <rect x="2" y="3" width="20" height="14" rx="2" ry="2"/>
-                            <circle cx="12" cy="10" r="2"/>
+                            <polyline points="8 17 12 21 16 17"/>
                         </svg>
-                        <span class="capture-btn-text">Take Screenshot</span>
+                        Select Screen &amp; Start Remote
                     </button>
-                    
-                    <div class="settings">
-                        <label class="timer-setting">
-                            <input type="checkbox" id="timerToggle">
-                            <span>3s Timer</span>
-                        </label>
-                        
-                        <button id="selectScreenBtn" class="select-screen-btn">
-                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                                <rect x="2" y="3" width="20" height="14" rx="2" ry="2"/>
-                                <polyline points="8 17 12 21 16 17"/>
-                            </svg>
-                            Select Screen &amp; Start Remote
-                        </button>
-                    </div>
+                    <button id="stopBtn" class="stop-btn" style="display: none;">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <rect x="6" y="6" width="12" height="12" rx="2" ry="2"/>
+                        </svg>
+                        Stop Remote
+                    </button>
                 </div>
             </div>
 
-            <div class="gallery-section">
-                <h2>Captured Screenshots</h2>
-                <div class="gallery" id="gallery">
-                    <div class="empty-state">
-                        No screenshots yet. Select a screen and click capture to get started!
-                    </div>
-                </div>
-
+            <div class="side-panel">
                 <div class="control-panel">
                     <h2>Remote Control (Test)</h2>
                     <p class="control-hint">
@@ -111,47 +94,24 @@
                         <label><input type="checkbox" id="modMeta"> Super</label>
                     </div>
                     <p class="control-result" id="keyResult"></p>
-
-                    <div class="control-divider"></div>
-
-                    <h3 class="control-subhead">Remote MCP</h3>
-                    <div class="mcp-status">
-                        <span class="mcp-dot" id="mcpStatusDot"></span>
-                        <span id="mcpStatusText">Disconnected</span>
-                    </div>
-                    <p class="control-hint" id="mcpHint">Use "Select Screen &amp; Start Remote" above to connect.</p>
-                    <div class="mcp-url-row" id="mcpUrlRow" style="display: none;">
-                        <input type="text" id="mcpUrl" readonly>
-                        <button id="mcpCopyBtn" class="permission-btn">Copy</button>
-                    </div>
                 </div>
             </div>
         </main>
-    </div>
 
-    <div class="photo-modal" id="photoModal">
-        <div class="modal-content">
-            <button class="modal-close" id="modalClose">&times;</button>
-            <img id="modalImage" src="" alt="Full size screenshot">
-            <div class="modal-actions">
-                <button id="downloadBtn" class="action-btn">
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
-                        <polyline points="7 10 12 15 17 10"/>
-                        <line x1="12" y1="15" x2="12" y2="3"/>
-                    </svg>
-                    Save
-                </button>
-                <button id="deleteBtn" class="action-btn danger">
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                        <path d="M3 6h18"/>
-                        <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/>
-                        <path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>
-                    </svg>
-                    Delete
-                </button>
+        <section class="mcp-section">
+            <div class="mcp-section-header">
+                <h3 class="control-subhead">Remote MCP</h3>
+                <div class="mcp-status">
+                    <span class="mcp-dot" id="mcpStatusDot"></span>
+                    <span id="mcpStatusText">Disconnected</span>
+                </div>
             </div>
-        </div>
+            <p class="control-hint" id="mcpHint">Use "Select Screen &amp; Start Remote" above to connect.</p>
+            <div class="mcp-url-row" id="mcpUrlRow" style="display: none;">
+                <input type="text" id="mcpUrl" readonly>
+                <button id="mcpCopyBtn" class="permission-btn">Copy</button>
+            </div>
+        </section>
     </div>
 
     <script src="./index.js"></script>

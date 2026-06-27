@@ -16,7 +16,13 @@ export type MouseButton = "left" | "right" | "middle";
 export type RemoteControlDeps = {
 	getScreenSize(): Promise<{ width: number; height: number }>;
 	/** Capture the currently shared screen as a base64 PNG (no data: prefix). */
-	screenshot(): Promise<{ ok: boolean; base64?: string; error?: string }>;
+	screenshot(grid?: boolean): Promise<{
+		ok: boolean;
+		base64?: string;
+		width?: number;
+		height?: number;
+		error?: string;
+	}>;
 	click(
 		x: number,
 		y: number,
@@ -50,7 +56,7 @@ export function registerTools(mcp: McpServer, deps: RemoteControlDeps): void {
 		{
 			title: "Get screen size",
 			description:
-				"Return the target screen resolution in pixels ({ width, height }). Click coordinates must be within 0..width-1 / 0..height-1.",
+				"Return the coordinate space used for both screenshots and clicks, in pixels ({ width, height }). This equals the dimensions of the image returned by `screenshot`. Click coordinates must be within 0..width-1 / 0..height-1.",
 		},
 		async () => {
 			const size = await deps.getScreenSize();
@@ -63,22 +69,32 @@ export function registerTools(mcp: McpServer, deps: RemoteControlDeps): void {
 		{
 			title: "Take screenshot",
 			description:
-				"Capture the currently shared screen as a PNG image. Requires the user to have started screen sharing in the app; returns an error otherwise.",
+				"Capture the currently shared screen as a PNG. By default a coordinate grid is overlaid (lines every 100px, bolder every 500px, labeled on every edge). The grid labels are in the EXACT pixel space used by `click`, so read target coordinates directly off the grid instead of estimating. Requires the user to have started screen sharing; returns an error otherwise.",
+			inputSchema: {
+				grid: z
+					.boolean()
+					.optional()
+					.describe(
+						"Overlay the coordinate grid (default true). Set false for a clean, unannotated screenshot.",
+					),
+			},
 		},
-		async () => {
-			const shot = await deps.screenshot();
+		async ({ grid }) => {
+			const shot = await deps.screenshot(grid ?? true);
 			if (!shot.ok || !shot.base64) {
 				return errorText(shot.error || "Screenshot failed");
 			}
-			return {
-				content: [
-					{
-						type: "image" as const,
-						data: shot.base64,
-						mimeType: "image/png",
-					},
-				],
-			};
+			const content: Array<
+				| { type: "image"; data: string; mimeType: string }
+				| { type: "text"; text: string }
+			> = [{ type: "image", data: shot.base64, mimeType: "image/png" }];
+			if (shot.width && shot.height) {
+				content.push({
+					type: "text",
+					text: `Image is ${shot.width}x${shot.height} px. Origin (0,0) is top-left. Use these exact pixel coordinates for click(); read them off the overlaid grid (lines every 100px, labeled on every edge).`,
+				});
+			}
+			return { content };
 		},
 	);
 
@@ -87,7 +103,7 @@ export function registerTools(mcp: McpServer, deps: RemoteControlDeps): void {
 		{
 			title: "Click",
 			description:
-				"Click the mouse at absolute pixel coordinates (origin top-left).",
+				"Click the mouse at absolute pixel coordinates (origin top-left). Coordinates are in the same pixel space as `get_screen_size` and the `screenshot` grid — read them off the grid rather than estimating. Recommended flow: screenshot → read coordinates → click → screenshot again to verify.",
 			inputSchema: {
 				x: z.number().int().describe("X coordinate in pixels (0 = left edge)"),
 				y: z.number().int().describe("Y coordinate in pixels (0 = top edge)"),
