@@ -84,16 +84,16 @@ call_tool() {
   echo ""
 }
 
-# --- query screen size first -------------------------------------------------
+# --- query system info first -------------------------------------------------
 RPC_ID=$((RPC_ID + 1))
 echo ""
-echo "→ tools/call get_screen_size …"
+echo "→ tools/call get_system_info …"
 SIZE_RESP=$(curl -sk -X POST "$URL" \
   -H 'content-type: application/json' \
   -H 'accept: application/json, text/event-stream' \
   -H "mcp-session-id: $SID" \
   -H "mcp-protocol-version: $PROTO" \
-  --data-binary "{\"jsonrpc\":\"2.0\",\"id\":${RPC_ID},\"method\":\"tools/call\",\"params\":{\"name\":\"get_screen_size\",\"arguments\":{}}}")
+  --data-binary "{\"jsonrpc\":\"2.0\",\"id\":${RPC_ID},\"method\":\"tools/call\",\"params\":{\"name\":\"get_system_info\",\"arguments\":{}}}")
 echo "$SIZE_RESP"
 
 # The size lives in content[0].text as JSON-escaped {"width":W,"height":H}.

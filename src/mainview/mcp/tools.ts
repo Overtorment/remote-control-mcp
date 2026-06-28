@@ -12,9 +12,32 @@ import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 
 export type MouseButton = "left" | "right" | "middle";
 
+/** Host system details surfaced to the agent via `get_system_info`. */
+export type SystemInfo = {
+	/** The pixel coordinate space for screenshots and clicks. */
+	screen: { width: number; height: number };
+	os: {
+		platform: string;
+		distro: string;
+		version: string;
+		kernel: string;
+		arch: string;
+	};
+	session: {
+		/** `wayland` | `x11` | "" */
+		type: string;
+		/** Desktop environment, e.g. `pantheon`, `GNOME`. */
+		desktop: string;
+	};
+	hostname: string;
+	keyboardLayout: string;
+	inputMethod: string;
+	time: { iso: string; timezone: string };
+};
+
 /** Platform capabilities the tools depend on, injected via `configureMcp`. */
 export type RemoteControlDeps = {
-	getScreenSize(): Promise<{ width: number; height: number }>;
+	getSystemInfo(): Promise<SystemInfo>;
 	/** Capture the currently shared screen as a base64 PNG (no data: prefix). */
 	screenshot(grid?: boolean): Promise<{
 		ok: boolean;
@@ -52,15 +75,15 @@ function errorText(message: string) {
 
 export function registerTools(mcp: McpServer, deps: RemoteControlDeps): void {
 	mcp.registerTool(
-		"get_screen_size",
+		"get_system_info",
 		{
-			title: "Get screen size",
+			title: "Get system info",
 			description:
-				"Return the coordinate space used for both screenshots and clicks, in pixels ({ width, height }). This equals the dimensions of the image returned by `screenshot`. Click coordinates must be within 0..width-1 / 0..height-1.",
+				"Return information about the host machine: `screen` size in pixels, OS/distro and kernel, CPU architecture, desktop session (Wayland/X11 + environment), hostname, assumed keyboard layout, input method, and local time/timezone. Call this first — `screen.width`/`screen.height` define the click bounds (0..width-1 / 0..height-1) and equal the dimensions of the image returned by `screenshot`.",
 		},
 		async () => {
-			const size = await deps.getScreenSize();
-			return jsonText(size);
+			const info = await deps.getSystemInfo();
+			return jsonText(info);
 		},
 	);
 
@@ -69,7 +92,7 @@ export function registerTools(mcp: McpServer, deps: RemoteControlDeps): void {
 		{
 			title: "Take screenshot",
 			description:
-				"Capture the currently shared screen as a PNG. By default a coordinate grid is overlaid (lines every 100px, bolder every 500px, labeled on every edge). The grid labels are in the EXACT pixel space used by `click`, so read target coordinates directly off the grid instead of estimating. Requires the user to have started screen sharing; returns an error otherwise.",
+				"Capture the currently shared screen as a PNG. Mind you, the screenshot shows full display, which might contain multiple windows and/or OS elements. By default a coordinate grid is overlaid (lines every 100px, bolder every 500px, labeled on every edge). The grid labels are in the EXACT pixel space used by `click`, so read target coordinates directly off the grid instead of estimating. Always read screenshots very carefully, if you need to land a click always aim as exact center if element being clicked.",
 			inputSchema: {
 				grid: z
 					.boolean()
@@ -91,7 +114,7 @@ export function registerTools(mcp: McpServer, deps: RemoteControlDeps): void {
 			if (shot.width && shot.height) {
 				content.push({
 					type: "text",
-					text: `Image is ${shot.width}x${shot.height} px. Origin (0,0) is top-left. Use these exact pixel coordinates for click(); read them off the overlaid grid (lines every 100px, labeled on every edge).`,
+					text: `Image is ${shot.width}x${shot.height} px. Origin (0,0) is top-left. Use these exact pixel coordinates for click(); read them off the overlaid grid (lines every 100px, labeled on every edge), interpolate between grid lines if necessary.`,
 				});
 			}
 			return { content };
@@ -103,7 +126,7 @@ export function registerTools(mcp: McpServer, deps: RemoteControlDeps): void {
 		{
 			title: "Click",
 			description:
-				"Click the mouse at absolute pixel coordinates (origin top-left). Coordinates are in the same pixel space as `get_screen_size` and the `screenshot` grid — read them off the grid rather than estimating. Recommended flow: screenshot → read coordinates → click → screenshot again to verify.",
+				"Click the mouse at absolute pixel coordinates (origin top-left). Coordinates are in the same pixel space as `get_system_info`'s screen and the `screenshot` grid — read them off the grid rather than estimating. Recommended flow: screenshot → read coordinates → click → screenshot again to verify. Interpolate between grid lines if necessary, land clicks on exact center of element being clicked.",
 			inputSchema: {
 				x: z.number().int().describe("X coordinate in pixels (0 = left edge)"),
 				y: z.number().int().describe("Y coordinate in pixels (0 = top edge)"),

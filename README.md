@@ -17,7 +17,7 @@ and tools can drive the machine.
 - **Screen capture** — pick a display via the Web `getDisplayMedia` API and take PNG screenshots.
 - **Synthetic mouse** — click at absolute pixel coordinates (left/right/middle).
 - **Synthetic keyboard** — type text (with human-like timing) and press named keys with modifiers.
-- **Remote MCP server** — 5 tools (`get_screen_size`, `screenshot`, `click`, `type_text`, `press_key`)
+- **Remote MCP server** — 5 tools (`get_system_info`, `screenshot`, `click`, `type_text`, `press_key`)
   exposed over a WebSocket tunnel with a stable public URL.
 - **In-app test panel** — exercise clicks/typing/keys locally before going remote.
 
@@ -81,7 +81,7 @@ at the public tunnel URL. Tools:
 
 | Tool              | Description |
 |-------------------|-------------|
-| `get_screen_size` | Target screen resolution `{width,height}`. |
+| `get_system_info` | Host details: screen size (the click coordinate space), OS/distro, kernel, arch, session (Wayland/X11), hostname, time. |
 | `screenshot`      | PNG of the shared screen (requires active screen sharing). |
 | `click`           | Click at absolute pixel `x,y` (`button`: left/right/middle). |
 | `type_text`       | Type a string (US layout; non-ASCII skipped + reported). |

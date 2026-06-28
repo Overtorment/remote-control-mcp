@@ -1,5 +1,6 @@
 import { BrowserWindow, BrowserView, type RPCSchema } from "electrobun/bun";
 import { mkdirSync } from "node:fs";
+import { hostname, release } from "node:os";
 import {
 	VirtualMouse,
 	VirtualKeyboard,
@@ -7,6 +8,16 @@ import {
 	uinputWritable,
 	type MouseButton,
 } from "./uinput";
+import {
+	configureLocalMcpServer,
+	startLocalMcpServer,
+	stopLocalMcpServer,
+} from "./local-mcp-server";
+import type {
+	TunnelHttpRequest,
+	TunnelHttpResponse,
+} from "../mainview/mcp/tunnel-types";
+import type { SystemInfo } from "../mainview/mcp/tools";
 
 // Persistent key/value store backed by a JSON file in the user's config dir.
 // The webview's localStorage is not reliably persisted across app restarts in
@@ -63,6 +74,50 @@ async function detectScreenSize(): Promise<{ width: number; height: number }> {
 	return { width: 1920, height: 1080 };
 }
 
+// Parse /etc/os-release for a human-readable distro name + version.
+async function readOsRelease(): Promise<{ distro: string; version: string }> {
+	try {
+		const text = await Bun.file("/etc/os-release").text();
+		const map: Record<string, string> = {};
+		for (const line of text.split("\n")) {
+			const match = line.match(/^([A-Z0-9_]+)=(.*)$/);
+			if (match?.[1]) map[match[1]] = match[2]!.replace(/^"|"$/g, "");
+		}
+		return {
+			distro: map["PRETTY_NAME"] || map["NAME"] || "",
+			version: map["VERSION"] || map["VERSION_ID"] || "",
+		};
+	} catch {
+		return { distro: "", version: "" };
+	}
+}
+
+// Gather host details useful to a remote-control agent.
+async function gatherSystemInfo(): Promise<SystemInfo> {
+	const { distro, version } = await readOsRelease();
+	return {
+		screen: virtualMouse.resolution,
+		os: {
+			platform: process.platform,
+			distro,
+			version,
+			kernel: release(),
+			arch: process.arch,
+		},
+		session: {
+			type: Bun.env["XDG_SESSION_TYPE"] || "",
+			desktop: Bun.env["XDG_CURRENT_DESKTOP"] || Bun.env["DESKTOP_SESSION"] || "",
+		},
+		hostname: hostname(),
+		keyboardLayout: "US (assumed)",
+		inputMethod: "uinput (virtual mouse/keyboard)",
+		time: {
+			iso: new Date().toISOString(),
+			timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || "",
+		},
+	};
+}
+
 const screenSize = await detectScreenSize();
 const virtualMouse = new VirtualMouse(screenSize.width, screenSize.height);
 const virtualKeyboard = new VirtualKeyboard();
@@ -71,12 +126,9 @@ const virtualKeyboard = new VirtualKeyboard();
 export type PhotoBoothRPC = {
 	bun: RPCSchema<{
 		requests: {
-			getScreenSize: {
+			getSystemInfo: {
 				params: {};
-				response: {
-					width: number;
-					height: number;
-				};
+				response: SystemInfo;
 			};
 			setCaptureResolution: {
 				params: {
@@ -140,11 +192,28 @@ export type PhotoBoothRPC = {
 				params: { key: string; value: string };
 				response: { success: boolean };
 			};
+			// Closed-circuit ("local only") transport: start/stop a local HTTP MCP
+			// listener in this Bun process instead of tunneling through the relay.
+			mcpLocalServerStart: {
+				params: {};
+				response: { url: string; port: number };
+			};
+			mcpLocalServerStop: {
+				params: {};
+				response: { success: boolean };
+			};
 		};
 		messages: {};
 	}>;
 	webview: RPCSchema<{
-		requests: {};
+		requests: {
+			// Bun → renderer: hand an HTTP request from the local MCP listener to the
+			// webview's MCP handler (same handler the tunnel uses).
+			mcpHandleHttp: {
+				params: TunnelHttpRequest;
+				response: TunnelHttpResponse;
+			};
+		};
 		messages: {};
 	}>;
 };
@@ -154,7 +223,7 @@ const photoBoothRPC = BrowserView.defineRPC<PhotoBoothRPC>({
 	maxRequestTime: 120000,
 	handlers: {
 		requests: {
-			getScreenSize: async () => virtualMouse.resolution,
+			getSystemInfo: async () => gatherSystemInfo(),
 			// Align the virtual mouse's absolute axis range with the live screen-
 			// capture resolution. libinput normalizes a uinput abs device's
 			// [0, max] range onto the full output, so by matching the range to the
@@ -192,6 +261,11 @@ const photoBoothRPC = BrowserView.defineRPC<PhotoBoothRPC>({
 				await kvPersist();
 				return { success: true };
 			},
+			mcpLocalServerStart: async () => startLocalMcpServer(),
+			mcpLocalServerStop: async () => {
+				stopLocalMcpServer();
+				return { success: true };
+			},
 			simulateClick: async ({ x, y, button }) => {
 				try {
 					await virtualMouse.click(x, y, button ?? "left");
@@ -224,11 +298,26 @@ const mainWindow = new BrowserWindow({
 	rpc: photoBoothRPC,
 });
 
+// Bridge the local MCP listener (Bun) to the webview's MCP handler, and persist
+// its bearer token via the existing file-backed KV store.
+configureLocalMcpServer(
+	(req) => photoBoothRPC.request.mcpHandleHttp(req),
+	{
+		getItem: async (key) => kvData[key] ?? "",
+		setItem: async (key, value) => {
+			kvData[key] = value;
+			await kvPersist();
+		},
+	},
+);
+
 process.on("exit", () => {
+	stopLocalMcpServer();
 	virtualMouse.destroy();
 	virtualKeyboard.destroy();
 });
 process.on("SIGINT", () => {
+	stopLocalMcpServer();
 	virtualMouse.destroy();
 	virtualKeyboard.destroy();
 	process.exit(0);

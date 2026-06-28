@@ -323,6 +323,43 @@ main {
 	margin-bottom: 0;
 }
 
+.mcp-local-toggle {
+	display: flex;
+	align-items: flex-start;
+	gap: 10px;
+	width: 100%;
+	margin: 0 0 0.75rem;
+	cursor: pointer;
+	text-align: left;
+}
+
+.mcp-local-toggle-input {
+	margin: 2px 0 0;
+	width: 16px;
+	height: 16px;
+	accent-color: #007aff;
+	cursor: pointer;
+	flex-shrink: 0;
+}
+
+.mcp-local-toggle-text {
+	display: flex;
+	flex-direction: column;
+	gap: 2px;
+}
+
+.mcp-local-toggle-title {
+	font-size: 0.85rem;
+	color: #ffffff;
+	font-weight: 600;
+}
+
+.mcp-local-toggle-subtitle {
+	font-size: 0.75rem;
+	color: rgba(255, 255, 255, 0.55);
+	line-height: 1.3;
+}
+
 .mcp-status {
 	display: flex;
 	align-items: center;

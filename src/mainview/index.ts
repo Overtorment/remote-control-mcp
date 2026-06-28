@@ -5,20 +5,29 @@ import { Buffer } from "buffer";
 import Electrobun, { Electroview } from "electrobun/view";
 import type { PhotoBoothRPC } from "../bun/index";
 import { bootstrapMcp } from "./mcp/bootstrap";
+import { handleMcpRequest } from "./mcp/mcp";
 import {
-	connectTunnel,
-	disconnectTunnel,
-	getTunnelConnectionStatus,
-	getTunnelPublicUrl,
-	subscribeTunnelConnection,
-} from "./mcp/bootstrap";
+	configureTransport,
+	connectActiveTransport,
+	disconnectActiveTransport,
+	getMcpLocalMode,
+	getMcpPublicUrl,
+	getMcpStatus,
+	loadMcpLocalMode,
+	setMcpLocalMode,
+	subscribeMcp,
+} from "./mcp/transport";
 import type { MouseButton, RemoteControlDeps } from "./mcp/tools";
 import type { IStorage } from "./mcp/tunnel-types";
 
 const rpc = Electroview.defineRPC<PhotoBoothRPC>({
 	maxRequestTime: 120000,
 	handlers: {
-		requests: {},
+		requests: {
+			// Bun's local MCP listener forwards each HTTP request here; reuse the same
+			// MCP handler the tunnel uses. `configureMcp` runs during bootstrapMcp.
+			mcpHandleHttp: (req) => handleMcpRequest(req),
+		},
 		messages: {},
 	},
 });
@@ -279,10 +288,10 @@ class ScreenCaptureApp {
 
 	private async loadScreenSize() {
 		try {
-			const size = await electrobun.rpc!.request.getScreenSize({});
-			this.screenSizeLabel.textContent = `${size.width} x ${size.height}`;
-			this.clickXInput.max = String(size.width - 1);
-			this.clickYInput.max = String(size.height - 1);
+			const { screen } = await electrobun.rpc!.request.getSystemInfo({});
+			this.screenSizeLabel.textContent = `${screen.width} x ${screen.height}`;
+			this.clickXInput.max = String(screen.width - 1);
+			this.clickYInput.max = String(screen.height - 1);
 		} catch (error) {
 			this.screenSizeLabel.textContent = "unknown";
 			console.error("Failed to get screen size:", error);
@@ -531,6 +540,7 @@ class McpPanel {
 	private urlRow: HTMLElement;
 	private urlInput: HTMLInputElement;
 	private copyBtn: HTMLButtonElement;
+	private localToggle: HTMLInputElement;
 	private ready: Promise<void> = Promise.resolve();
 
 	constructor(private app: ScreenCaptureApp) {
@@ -539,27 +549,45 @@ class McpPanel {
 		this.urlRow = document.getElementById("mcpUrlRow") as HTMLElement;
 		this.urlInput = document.getElementById("mcpUrl") as HTMLInputElement;
 		this.copyBtn = document.getElementById("mcpCopyBtn") as HTMLButtonElement;
+		this.localToggle = document.getElementById(
+			"mcpLocalMode",
+		) as HTMLInputElement;
 
 		this.copyBtn.addEventListener("click", () => this.copyUrl());
+		this.localToggle.addEventListener("change", () => {
+			void setMcpLocalMode(this.localToggle.checked);
+		});
 
-		// Tunnel start/stop is driven by the unified screen-share action: granting
-		// consent connects the tunnel; stopping the share disconnects it.
+		// Configure the transport layer (tunnel vs. local listener) before anything
+		// connects. Local-server controls are RPC calls into the Bun process.
+		configureTransport({
+			storage: this.buildStorage(),
+			local: {
+				start: () => electrobun.rpc!.request.mcpLocalServerStart({}),
+				stop: async () => {
+					await electrobun.rpc!.request.mcpLocalServerStop({});
+				},
+			},
+		});
+
+		// Transport start/stop is driven by the unified screen-share action: granting
+		// consent connects the preferred transport; stopping the share disconnects it.
 		this.app.onShareStarted = () => void this.connect();
-		this.app.onShareEnded = () => void disconnectTunnel();
+		this.app.onShareEnded = () => void disconnectActiveTransport();
 
-		subscribeTunnelConnection(() => this.render());
+		subscribeMcp(() => this.render());
 		this.render();
 		void this.start();
 	}
 
 	private async connect() {
 		await this.ready;
-		await connectTunnel();
+		await connectActiveTransport();
 	}
 
 	private buildDeps(): RemoteControlDeps {
 		return {
-			getScreenSize: () => electrobun.rpc!.request.getScreenSize({}),
+			getSystemInfo: () => electrobun.rpc!.request.getSystemInfo({}),
 			screenshot: (grid?: boolean) =>
 				this.app.captureScreenshotBase64(grid ?? true),
 			click: (x: number, y: number, button: MouseButton) =>
@@ -584,7 +612,10 @@ class McpPanel {
 	}
 
 	private async start() {
-		this.ready = bootstrapMcp(this.buildDeps(), this.buildStorage());
+		this.ready = (async () => {
+			await bootstrapMcp(this.buildDeps(), this.buildStorage());
+			await loadMcpLocalMode();
+		})();
 		try {
 			await this.ready;
 		} catch (error) {
@@ -609,14 +640,20 @@ class McpPanel {
 	}
 
 	private render() {
-		const status = getTunnelConnectionStatus();
-		const url = getTunnelPublicUrl();
+		const status = getMcpStatus();
+		const url = getMcpPublicUrl();
+
+		if (this.localToggle.checked !== getMcpLocalMode()) {
+			this.localToggle.checked = getMcpLocalMode();
+		}
 
 		this.statusDot.classList.toggle("connected", status === "connected");
 		this.statusDot.classList.toggle("connecting", status === "connecting");
 		this.statusText.textContent =
 			status === "connected"
-				? "Connected"
+				? getMcpLocalMode()
+					? "Connected (local)"
+					: "Connected"
 				: status === "connecting"
 					? "Connecting…"
 					: "Disconnected";
