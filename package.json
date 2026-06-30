@@ -1,7 +1,7 @@
 {
-	"name": "electrobun-photo-booth",
+	"name": "remote-control-mcp",
 	"version": "1.0.0",
-	"description": "A desktop screen capture app built with Electrobun",
+	"description": "Desktop remote-control MCP server built with Electrobun",
 	"scripts": {
 		"start": "electrobun dev",
 		"dev": "electrobun dev --watch",

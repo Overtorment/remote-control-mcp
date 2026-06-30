@@ -23,7 +23,7 @@ import type { SystemInfo } from "../mainview/mcp/tools";
 // The webview's localStorage is not reliably persisted across app restarts in
 // the Electrobun webview, so the MCP tunnel session id (which keeps the public
 // URL stable) is persisted here instead, via RPC.
-const KV_DIR = `${Bun.env["XDG_CONFIG_HOME"] || `${Bun.env["HOME"] || "."}/.config`}/photo-booth-remote`;
+const KV_DIR = `${Bun.env["XDG_CONFIG_HOME"] || `${Bun.env["HOME"] || "."}/.config`}/remote-control-mcp`;
 const KV_PATH = `${KV_DIR}/storage.json`;
 let kvData: Record<string, string> = {};
 try {
@@ -122,8 +122,8 @@ const screenSize = await detectScreenSize();
 const virtualMouse = new VirtualMouse(screenSize.width, screenSize.height);
 const virtualKeyboard = new VirtualKeyboard();
 
-// Define RPC schema for photo saving + remote input control
-export type PhotoBoothRPC = {
+// Define RPC schema for remote input control + MCP plumbing
+export type RemoteControlMcpRPC = {
 	bun: RPCSchema<{
 		requests: {
 			getSystemInfo: {
@@ -219,7 +219,7 @@ export type PhotoBoothRPC = {
 };
 
 // Create RPC instance using BrowserView.defineRPC
-const photoBoothRPC = BrowserView.defineRPC<PhotoBoothRPC>({
+const remoteControlMcpRpc = BrowserView.defineRPC<RemoteControlMcpRPC>({
 	maxRequestTime: 120000,
 	handlers: {
 		requests: {
@@ -286,7 +286,7 @@ const photoBoothRPC = BrowserView.defineRPC<PhotoBoothRPC>({
 // Create the main window
 // Use native renderer (WKWebView) by default, but allow overriding with CEF
 const mainWindow = new BrowserWindow({
-	title: "Screen Capture",
+	title: "Remote Control MCP",
 	url: "views://mainview/index.html",
 	// Don't specify renderer to use the default (native WKWebView on macOS)
 	frame: {
@@ -295,13 +295,13 @@ const mainWindow = new BrowserWindow({
 		x: 100,
 		y: 100,
 	},
-	rpc: photoBoothRPC,
+	rpc: remoteControlMcpRpc,
 });
 
 // Bridge the local MCP listener (Bun) to the webview's MCP handler, and persist
 // its bearer token via the existing file-backed KV store.
 configureLocalMcpServer(
-	(req) => photoBoothRPC.request.mcpHandleHttp(req),
+	(req) => remoteControlMcpRpc.request.mcpHandleHttp(req),
 	{
 		getItem: async (key) => kvData[key] ?? "",
 		setItem: async (key, value) => {
@@ -323,7 +323,7 @@ process.on("SIGINT", () => {
 	process.exit(0);
 });
 
-console.log("Screen Capture app started!");
+console.log("Remote Control MCP started!");
 console.log(
 	`Detected screen size: ${screenSize.width}x${screenSize.height}`,
 );

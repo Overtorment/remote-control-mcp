@@ -6,18 +6,14 @@ from any single file.
 
 ## What this app is
 
-A **desktop remote-control app** built on [Electrobun](https://electrobun.dev).
-It was forked from an Electrobun *photo booth* template (webcam + screenshots);
-the webcam half has been removed and replaced with:
+A **desktop remote-control MCP server** built on [Electrobun](https://electrobun.dev).
+It captures a user-selected display and exposes mouse/keyboard control plus
+screenshots to external agents via MCP:
 
 - **Screen capture** of a user-selected display (via the Web `getDisplayMedia` API).
 - **Synthetic mouse/keyboard input** on Linux via `/dev/uinput` (FFI, no extra binaries).
 - **A remote MCP server** (Model Context Protocol) exposed to the outside world
   through a **WebSocket tunnel** so external agents/clients can drive the machine.
-
-> Naming debt: package name (`electrobun-photo-booth`), the `PhotoBoothRPC` type,
-> and `savePhoto` RPC are leftovers from the template. Don't be confused — this is
-> a remote-control app. Rename only if explicitly asked.
 
 ## Process model (read this before editing anything)
 
@@ -144,10 +140,7 @@ captured as ~1422×888), which silently offsets every click. Fix in place:
   output, so matching the range to the captured pixel space makes clicks land 1:1
   regardless of downscaling. (This is why the abs max value need not equal the real
   screen pixels — see gotcha #3.)
-- `screenshot` draws a **labeled coordinate grid** (every 100px, bold every 500px,
-  `ScreenCaptureApp.drawCoordinateGrid`) and returns the image dims as a text block.
-  The MCP instructions tell the agent to READ coordinates off the grid and to
-  screenshot-verify after clicking. Pass `grid:false` for a clean image.
+- `screenshot` returns the image dims as a text block alongside the PNG.
 Don't reintroduce a second coordinate system (e.g. clicking against xrandr dims while
 screenshotting the video frame) — that's the original misclick bug.
 
@@ -160,7 +153,7 @@ screenshotting the video frame) — that's the original misclick bug.
 Webview `localStorage` does **not** reliably persist across Electrobun restarts, so
 the MCP tunnel **session id** (which keeps the public URL stable across restarts)
 is stored in a **file-backed KV store in the Bun process** and accessed from the
-webview via RPC `kvGet`/`kvSet`. File: `$XDG_CONFIG_HOME/photo-booth-remote/storage.json`
+webview via RPC `kvGet`/`kvSet`. File: `$XDG_CONFIG_HOME/remote-control-mcp/storage.json`
 (falls back to `~/.config/...`). If the public URL changes on every restart, this
 plumbing is broken.
 
@@ -190,7 +183,7 @@ preference is persisted (`mcpLocalMode` in the KV store). Both transports are st
 Remote", and stopping the share disconnects whichever is live. `getMcpStatus`/
 `getMcpPublicUrl` track the transport that is *actually live*, not the preference.
 This is the one place the webview exposes an RPC the Bun side calls
-(`PhotoBoothRPC.webview.requests.mcpHandleHttp`).
+(`RemoteControlMcpRPC.webview.requests.mcpHandleHttp`).
 
 ### 7. `Buffer` polyfill in the webview
 The MCP SDK expects Node's `Buffer`. The webview top of `src/mainview/index.ts`

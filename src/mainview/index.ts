@@ -3,7 +3,7 @@ import { Buffer } from "buffer";
 (globalThis as { Buffer?: typeof Buffer }).Buffer ??= Buffer;
 
 import Electrobun, { Electroview } from "electrobun/view";
-import type { PhotoBoothRPC } from "../bun/index";
+import type { RemoteControlMcpRPC } from "../bun/index";
 import { bootstrapMcp } from "./mcp/bootstrap";
 import { handleMcpRequest } from "./mcp/mcp";
 import {
@@ -20,7 +20,7 @@ import {
 import type { MouseButton, RemoteControlDeps } from "./mcp/tools";
 import type { IStorage } from "./mcp/tunnel-types";
 
-const rpc = Electroview.defineRPC<PhotoBoothRPC>({
+const rpc = Electroview.defineRPC<RemoteControlMcpRPC>({
 	maxRequestTime: 120000,
 	handlers: {
 		requests: {
@@ -369,7 +369,7 @@ class ScreenCaptureApp {
 			});
 
 			this.video.srcObject = this.stream;
-			this.setStatus("Screen capture active - remote control enabled", true);
+			this.setStatus("Remote control active", true);
 			this.selectScreenBtn.style.display = "none";
 			this.stopBtn.style.display = "flex";
 
@@ -392,7 +392,7 @@ class ScreenCaptureApp {
 		} catch (error) {
 			console.error("Error selecting screen:", error);
 			this.setStatus(
-				`Screen capture error: ${(error as Error).message}`,
+				`Remote control error: ${(error as Error).message}`,
 				false,
 			);
 		}
@@ -439,12 +439,8 @@ class ScreenCaptureApp {
 		}
 	}
 
-	/**
-	 * Capture the current shared-screen frame as a base64 PNG (no data: prefix).
-	 * When `grid` is true (default) a labeled coordinate grid is drawn on top so
-	 * vision agents can read off target pixel coordinates instead of guessing.
-	 */
-	async captureScreenshotBase64(grid = true): Promise<{
+	/** Capture the current shared-screen frame as a base64 PNG (no data: prefix). */
+	async captureScreenshotBase64(): Promise<{
 		ok: boolean;
 		base64?: string;
 		width?: number;
@@ -455,7 +451,7 @@ class ScreenCaptureApp {
 			return {
 				ok: false,
 				error:
-					"No screen capture stream available. Start screen sharing in the app first.",
+					"No screen share active. Click \"Select Screen & Start Remote\" in the app first.",
 			};
 		}
 		try {
@@ -468,61 +464,12 @@ class ScreenCaptureApp {
 			this.canvas.width = width;
 			this.canvas.height = height;
 			context.drawImage(this.video, 0, 0);
-			if (grid) this.drawCoordinateGrid(context, width, height);
 			const dataUrl = this.canvas.toDataURL("image/png");
 			const base64 = dataUrl.replace(/^data:image\/\w+;base64,/, "");
 			return { ok: true, base64, width, height };
 		} catch (error) {
 			return { ok: false, error: (error as Error).message };
 		}
-	}
-
-	// Draw a pixel-coordinate grid over the screenshot. Lines every 100px (bolder
-	// every 500px), labeled along all four edges in the same pixel space used for
-	// clicks — this dramatically improves coordinate estimation accuracy.
-	private drawCoordinateGrid(
-		ctx: CanvasRenderingContext2D,
-		width: number,
-		height: number,
-	) {
-		const step = 100;
-		ctx.save();
-		ctx.font = "bold 13px monospace";
-		ctx.textBaseline = "top";
-
-		const label = (text: string, x: number, y: number) => {
-			ctx.lineWidth = 3;
-			ctx.strokeStyle = "rgba(0, 0, 0, 0.75)";
-			ctx.strokeText(text, x, y);
-			ctx.fillStyle = "rgba(255, 235, 59, 0.95)";
-			ctx.fillText(text, x, y);
-		};
-
-		for (let x = step; x < width; x += step) {
-			ctx.lineWidth = 1;
-			ctx.strokeStyle =
-				x % 500 === 0 ? "rgba(255, 0, 0, 0.55)" : "rgba(255, 0, 0, 0.28)";
-			ctx.beginPath();
-			ctx.moveTo(x, 0);
-			ctx.lineTo(x, height);
-			ctx.stroke();
-			label(String(x), x + 2, 2);
-			label(String(x), x + 2, height - 16);
-		}
-
-		for (let y = step; y < height; y += step) {
-			ctx.lineWidth = 1;
-			ctx.strokeStyle =
-				y % 500 === 0 ? "rgba(255, 0, 0, 0.55)" : "rgba(255, 0, 0, 0.28)";
-			ctx.beginPath();
-			ctx.moveTo(0, y);
-			ctx.lineTo(width, y);
-			ctx.stroke();
-			label(String(y), 2, y + 2);
-			label(String(y), width - 42, y + 2);
-		}
-
-		ctx.restore();
 	}
 
 	private setStatus(message: string, active: boolean, error: boolean = false) {
@@ -588,8 +535,7 @@ class McpPanel {
 	private buildDeps(): RemoteControlDeps {
 		return {
 			getSystemInfo: () => electrobun.rpc!.request.getSystemInfo({}),
-			screenshot: (grid?: boolean) =>
-				this.app.captureScreenshotBase64(grid ?? true),
+			screenshot: () => this.app.captureScreenshotBase64(),
 			click: (x: number, y: number, button: MouseButton) =>
 				electrobun.rpc!.request.simulateClick({ x, y, button }),
 			typeText: (text: string) => electrobun.rpc!.request.typeText({ text }),

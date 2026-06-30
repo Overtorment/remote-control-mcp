@@ -31,7 +31,7 @@ export async function bootstrapMcp(
 	if (bootstrapped) return;
 	bootstrapped = true;
 
-	configureMcp(deps, { name: "photo-booth-remote", version: "0.0.1" });
+	configureMcp(deps, { name: "remote-control-mcp", version: "0.0.1" });
 
 	await startTunnel({
 		handleRequest: handleMcpRequest,

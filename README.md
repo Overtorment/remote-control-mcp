@@ -1,6 +1,6 @@
-# Screen Capture & Remote Control (Electrobun)
+# Remote Control MCP (Electrobun)
 
-A cross-platform-scaffolded **desktop remote-control app** built with
+A **desktop remote-control MCP server** built with
 [Electrobun](https://electrobun.dev). It captures a user-selected screen and
 exposes mouse/keyboard control + screenshots as an **MCP (Model Context Protocol)
 server**, reachable from anywhere through a WebSocket tunnel — so external agents
@@ -110,5 +110,3 @@ Paste the URL from the app's **Remote MCP** panel.
 
 - US QWERTY keyboard layout assumed for synthetic typing.
 - Tunnel server: `wss://layerz.me:4433/connect` (already deployed; configurable in `tunnel.ts`).
-- Built from the Electrobun photo-booth template; some identifiers (`PhotoBoothRPC`,
-  `savePhoto`, the package name) are template leftovers.

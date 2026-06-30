@@ -3,7 +3,7 @@
   "configVersion": 1,
   "workspaces": {
     "": {
-      "name": "electrobun-photo-booth",
+      "name": "remote-control-mcp",
       "dependencies": {
         "@modelcontextprotocol/sdk": "^1.29.0",
         "buffer": "6.0.3",

@@ -3,19 +3,11 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Screen Capture</title>
+    <title>Remote Control MCP</title>
     <link rel="stylesheet" href="./index.css">
 </head>
 <body>
     <div class="container">
-        <header>
-            <h1>Screen Capture</h1>
-            <div class="status" id="status">
-                <span class="status-dot"></span>
-                <span class="status-text">Initializing...</span>
-            </div>
-        </header>
-
         <main>
             <div class="capture-section">
                 <div class="video-container">
@@ -101,9 +93,15 @@
         <section class="mcp-section">
             <div class="mcp-section-header">
                 <h3 class="control-subhead">Remote MCP</h3>
-                <div class="mcp-status">
-                    <span class="mcp-dot" id="mcpStatusDot"></span>
-                    <span id="mcpStatusText">Disconnected</span>
+                <div class="mcp-indicators">
+                    <div class="status" id="status">
+                        <span class="status-dot"></span>
+                        <span class="status-text">Initializing...</span>
+                    </div>
+                    <div class="mcp-status">
+                        <span class="mcp-dot" id="mcpStatusDot"></span>
+                        <span id="mcpStatusText">Disconnected</span>
+                    </div>
                 </div>
             </div>
             <label class="mcp-local-toggle">

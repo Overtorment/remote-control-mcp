@@ -2,8 +2,8 @@ import type { ElectrobunConfig } from "electrobun";
 
 export default {
 	app: {
-		name: "photo-booth",
-		identifier: "photobooth.electrobun.dev",
+		name: "remote-control-mcp",
+		identifier: "remotecontrolmcp.electrobun.dev",
 		version: "0.0.1",
 	},
 	build: {

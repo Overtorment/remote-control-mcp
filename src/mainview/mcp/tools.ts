@@ -1,8 +1,7 @@
 /**
  * Remote-control MCP tools.
  *
- * Replaces the wallet-specific `mcp-calls.ts` from the borrowed reference. Each
- * tool maps to an existing app capability: clicks/typing/keys are forwarded to
+ * Each tool maps to an existing app capability: clicks/typing/keys are forwarded to
  * the Bun process over Electrobun RPC; screenshots are captured from the active
  * screen-share stream in the webview.
  */
@@ -39,7 +38,7 @@ export type SystemInfo = {
 export type RemoteControlDeps = {
 	getSystemInfo(): Promise<SystemInfo>;
 	/** Capture the currently shared screen as a base64 PNG (no data: prefix). */
-	screenshot(grid?: boolean): Promise<{
+	screenshot(): Promise<{
 		ok: boolean;
 		base64?: string;
 		width?: number;
@@ -73,6 +72,32 @@ function errorText(message: string) {
 	};
 }
 
+type ScreenshotResult = Awaited<ReturnType<RemoteControlDeps["screenshot"]>>;
+
+function sleep(ms: number): Promise<void> {
+	return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function screenshotResponse(
+	shot: ScreenshotResult,
+	prefix?: string,
+) {
+	if (!shot.ok || !shot.base64) {
+		return errorText(shot.error || "Screenshot failed");
+	}
+	const content: Array<
+		| { type: "image"; data: string; mimeType: string }
+		| { type: "text"; text: string }
+	> = [{ type: "image", data: shot.base64, mimeType: "image/png" }];
+	if (shot.width && shot.height) {
+		const dims = `Image is ${shot.width}x${shot.height} px. Origin (0,0) is top-left.`;
+		content.push({ type: "text", text: prefix ? `${prefix} ${dims}` : dims });
+	} else if (prefix) {
+		content.push({ type: "text", text: prefix });
+	}
+	return { content };
+}
+
 export function registerTools(mcp: McpServer, deps: RemoteControlDeps): void {
 	mcp.registerTool(
 		"get_system_info",
@@ -92,32 +117,15 @@ export function registerTools(mcp: McpServer, deps: RemoteControlDeps): void {
 		{
 			title: "Take screenshot",
 			description:
-				"Capture the currently shared screen as a PNG. Mind you, the screenshot shows full display, which might contain multiple windows and/or OS elements. By default a coordinate grid is overlaid (lines every 100px, bolder every 500px, labeled on every edge). The grid labels are in the EXACT pixel space used by `click`, so read target coordinates directly off the grid instead of estimating. Always read screenshots very carefully, if you need to land a click always aim as exact center if element being clicked.",
-			inputSchema: {
-				grid: z
-					.boolean()
-					.optional()
-					.describe(
-						"Overlay the coordinate grid (default true). Set false for a clean, unannotated screenshot.",
-					),
-			},
+				"Capture the currently shared screen as a PNG. When clicking, aim for the exact center of the target element." +
+				"Screenshots are returned inline (as base64) with the response, and can be several megabytes." + 
+				"If you are using `mcporter` always use `--save-images <dir>` to actually save the images to a directory." +
+				"If you need to show images to the user make sure images are not outside of the allowed directory." +
+				"When providing screenshots to a model for computer vision always use `detail: \"original\"` or similar setting to provide image without any additional processing."
 		},
-		async ({ grid }) => {
-			const shot = await deps.screenshot(grid ?? true);
-			if (!shot.ok || !shot.base64) {
-				return errorText(shot.error || "Screenshot failed");
-			}
-			const content: Array<
-				| { type: "image"; data: string; mimeType: string }
-				| { type: "text"; text: string }
-			> = [{ type: "image", data: shot.base64, mimeType: "image/png" }];
-			if (shot.width && shot.height) {
-				content.push({
-					type: "text",
-					text: `Image is ${shot.width}x${shot.height} px. Origin (0,0) is top-left. Use these exact pixel coordinates for click(); read them off the overlaid grid (lines every 100px, labeled on every edge), interpolate between grid lines if necessary.`,
-				});
-			}
-			return { content };
+		async () => {
+			const shot = await deps.screenshot();
+			return screenshotResponse(shot);
 		},
 	);
 
@@ -126,7 +134,12 @@ export function registerTools(mcp: McpServer, deps: RemoteControlDeps): void {
 		{
 			title: "Click",
 			description:
-				"Click the mouse at absolute pixel coordinates (origin top-left). Coordinates are in the same pixel space as `get_system_info`'s screen and the `screenshot` grid — read them off the grid rather than estimating. Recommended flow: screenshot → read coordinates → click → screenshot again to verify. Interpolate between grid lines if necessary, land clicks on exact center of element being clicked.",
+				"Click the mouse at absolute pixel coordinates (origin top-left). Coordinates are in the same pixel space as `get_system_info`'s screen and `screenshot`. After clicking, waits 500ms and returns a screenshot (same format as the `screenshot` tool)." +
+				"Not all actions execute that quickly, so you may need to wait longer to get a screenshot of the result." +
+				"Screenshots are returned inline (as base64) with the response, and can be several megabytes." + 
+				"If you are using `mcporter` always use `--save-images <dir>` to actually save the images to a directory." +
+				"If you need to show images to the user make sure images are not outside of the allowed directory." +
+				"When providing screenshots to a model for computer vision always use `detail: \"original\"` or similar setting to provide image without any additional processing.",
 			inputSchema: {
 				x: z.number().int().describe("X coordinate in pixels (0 = left edge)"),
 				y: z.number().int().describe("Y coordinate in pixels (0 = top edge)"),
@@ -137,11 +150,17 @@ export function registerTools(mcp: McpServer, deps: RemoteControlDeps): void {
 			},
 		},
 		async ({ x, y, button }) => {
-			const result = await deps.click(x, y, button ?? "left");
+			const btn = button ?? "left";
+			const result = await deps.click(x, y, btn);
 			if (!result.success) {
 				return errorText(result.error || "Click failed");
 			}
-			return jsonText({ clicked: { x, y, button: button ?? "left" } });
+			await sleep(500);
+			const shot = await deps.screenshot();
+			return screenshotResponse(
+				shot,
+				`Clicked ${btn} at (${x}, ${y}).`,
+			);
 		},
 	);
 

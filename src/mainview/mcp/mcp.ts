@@ -28,7 +28,7 @@ type McpInstance = {
 type ServerInfo = { name: string; version: string };
 
 const DEFAULT_SERVER_INFO: ServerInfo = {
-	name: "photo-booth-remote",
+	name: "remote-control-mcp",
 	version: "0.0.1",
 };
 
@@ -111,7 +111,7 @@ async function syntheticInitialize(
 		params: {
 			protocolVersion,
 			capabilities: {},
-			clientInfo: { name: "photo-booth", version: "0" },
+			clientInfo: { name: "remote-control-mcp", version: "0" },
 		},
 	};
 	const url = `http://tunnel.local${path.startsWith("/") ? path : `/${path}`}`;

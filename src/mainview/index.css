@@ -19,26 +19,11 @@ body {
 	flex-direction: column;
 }
 
-header {
-	background: #2a2a2a;
-	padding: 1rem 2rem;
-	display: flex;
-	justify-content: space-between;
-	align-items: center;
-	border-bottom: 1px solid #3a3a3a;
-	gap: 2rem;
-}
-
-h1 {
-	font-size: 1.5rem;
-	font-weight: 600;
-}
-
 .status {
 	display: flex;
 	align-items: center;
 	gap: 0.5rem;
-	font-size: 0.875rem;
+	font-size: 0.8rem;
 	color: #999;
 }
 
@@ -314,12 +299,21 @@ main {
 .mcp-section-header {
 	display: flex;
 	align-items: center;
+	justify-content: space-between;
 	gap: 1rem;
 	margin-bottom: 0.5rem;
 }
 
+.mcp-indicators {
+	display: flex;
+	align-items: center;
+	gap: 1.5rem;
+	flex-shrink: 0;
+}
+
 .mcp-section-header .control-subhead,
-.mcp-section-header .mcp-status {
+.mcp-section-header .mcp-status,
+.mcp-section-header .status {
 	margin-bottom: 0;
 }
 
@@ -366,7 +360,6 @@ main {
 	gap: 0.5rem;
 	font-size: 0.8rem;
 	color: #999;
-	margin-bottom: 0.75rem;
 }
 
 .mcp-dot {
