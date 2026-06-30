@@ -92,7 +92,7 @@ There is **no test suite**. To verify a change compiles, run `bun run build:cana
 | Tool              | Backed by                                  | Notes |
 |-------------------|--------------------------------------------|-------|
 | `get_system_info` | RPC `getSystemInfo` → `os`/`/etc/os-release`/env | Returns `{ screen, os, session, hostname, keyboardLayout, inputMethod, time }`. `screen` is the capture resolution and the click space (`0..w-1 / 0..h-1`). `SystemInfo` type lives in `tools.ts`. |
-| `screenshot`      | Webview `getDisplayMedia` stream → canvas  | **Requires the user to have started screen sharing**; errors otherwise. Returns PNG. |
+| `screenshot`      | Webview `getDisplayMedia` stream → canvas  | **Requires the user to have started screen sharing**; errors otherwise. Returns JPEG (90% quality). |
 | `click`           | RPC `simulateClick` → `VirtualMouse`       | Absolute pixel coords, origin top-left. |
 | `type_text`       | RPC `typeText` → `VirtualKeyboard`         | US layout only; non-ASCII chars are skipped + reported. |
 | `press_key`       | RPC `pressKey` → `VirtualKeyboard`         | Named keys (`enter`,`tab`,`f5`,`up`…) or a char, optional modifiers `ctrl/shift/alt/meta`. |
@@ -140,7 +140,7 @@ captured as ~1422×888), which silently offsets every click. Fix in place:
   output, so matching the range to the captured pixel space makes clicks land 1:1
   regardless of downscaling. (This is why the abs max value need not equal the real
   screen pixels — see gotcha #3.)
-- `screenshot` returns the image dims as a text block alongside the PNG.
+- `screenshot` returns the image dims as a text block alongside the JPEG.
 Don't reintroduce a second coordinate system (e.g. clicking against xrandr dims while
 screenshotting the video frame) — that's the original misclick bug.
 

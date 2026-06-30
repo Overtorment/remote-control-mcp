@@ -439,7 +439,7 @@ class ScreenCaptureApp {
 		}
 	}
 
-	/** Capture the current shared-screen frame as a base64 PNG (no data: prefix). */
+	/** Capture the current shared-screen frame as a base64 JPEG (no data: prefix). */
 	async captureScreenshotBase64(): Promise<{
 		ok: boolean;
 		base64?: string;
@@ -464,7 +464,7 @@ class ScreenCaptureApp {
 			this.canvas.width = width;
 			this.canvas.height = height;
 			context.drawImage(this.video, 0, 0);
-			const dataUrl = this.canvas.toDataURL("image/png");
+			const dataUrl = this.canvas.toDataURL("image/jpeg", 0.9);
 			const base64 = dataUrl.replace(/^data:image\/\w+;base64,/, "");
 			return { ok: true, base64, width, height };
 		} catch (error) {

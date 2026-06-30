@@ -37,7 +37,7 @@ export type SystemInfo = {
 /** Platform capabilities the tools depend on, injected via `configureMcp`. */
 export type RemoteControlDeps = {
 	getSystemInfo(): Promise<SystemInfo>;
-	/** Capture the currently shared screen as a base64 PNG (no data: prefix). */
+	/** Capture the currently shared screen as a base64 JPEG (no data: prefix). */
 	screenshot(): Promise<{
 		ok: boolean;
 		base64?: string;
@@ -88,7 +88,7 @@ function screenshotResponse(
 	const content: Array<
 		| { type: "image"; data: string; mimeType: string }
 		| { type: "text"; text: string }
-	> = [{ type: "image", data: shot.base64, mimeType: "image/png" }];
+	> = [{ type: "image", data: shot.base64, mimeType: "image/jpeg" }];
 	if (shot.width && shot.height) {
 		const dims = `Image is ${shot.width}x${shot.height} px. Origin (0,0) is top-left.`;
 		content.push({ type: "text", text: prefix ? `${prefix} ${dims}` : dims });
@@ -117,7 +117,7 @@ export function registerTools(mcp: McpServer, deps: RemoteControlDeps): void {
 		{
 			title: "Take screenshot",
 			description:
-				"Capture the currently shared screen as a PNG. When clicking, aim for the exact center of the target element." +
+				"Capture the currently shared screen as a JPEG (90% quality). When clicking, aim for the exact center of the target element." +
 				"Screenshots are returned inline (as base64) with the response, and can be several megabytes." + 
 				"If you are using `mcporter` always use `--save-images <dir>` to actually save the images to a directory." +
 				"If you need to show images to the user make sure images are not outside of the allowed directory." +
