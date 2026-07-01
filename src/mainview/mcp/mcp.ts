@@ -15,6 +15,7 @@ import {
 	DEFAULT_NEGOTIATED_PROTOCOL_VERSION,
 	isInitializeRequest,
 } from "@modelcontextprotocol/sdk/types.js";
+import pkg from "../../../package.json";
 import { MCP_SERVER_INSTRUCTIONS } from "./instructions";
 import { type RemoteControlDeps, registerTools } from "./tools";
 import type { TunnelHttpRequest, TunnelHttpResponse } from "./tunnel-types";
@@ -27,8 +28,8 @@ type McpInstance = {
 type ServerInfo = { name: string; version: string };
 
 const DEFAULT_SERVER_INFO: ServerInfo = {
-	name: "remote-control-mcp",
-	version: "0.0.1",
+	name: pkg.name,
+	version: pkg.version,
 };
 
 const mcpInstances = new Map<string, McpInstance>();

@@ -132,7 +132,7 @@ class ScreenCaptureApp {
 	private initializeEventListeners() {
 		this.selectScreenBtn.addEventListener("click", () => this.selectScreen());
 		this.stopBtn.addEventListener("click", () =>
-			this.endShare("Remote stopped"),
+			this.endShare("Screen reading stopped"),
 		);
 
 		this.simulateClickBtn.addEventListener("click", () => this.simulateClick());
@@ -375,7 +375,7 @@ class ScreenCaptureApp {
 			});
 
 			this.video.srcObject = this.stream;
-			this.setStatus("Remote control active", true);
+			this.setStatus("Screen reading active", true);
 			this.selectScreenBtn.style.display = "none";
 			this.stopBtn.style.display = "flex";
 
