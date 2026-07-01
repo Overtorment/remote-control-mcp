@@ -7,9 +7,9 @@
  */
 
 import { configureMcp, handleMcpRequest, resetMcpSessions } from "./mcp";
+import type { RemoteControlDeps } from "./tools";
 import { startTunnel } from "./tunnel";
 import type { AppLifecycle, IStorage } from "./tunnel-types";
-import type { RemoteControlDeps } from "./tools";
 
 /** Reconnect the tunnel when the desktop window becomes visible again. */
 const desktopAppLifecycle: AppLifecycle = {

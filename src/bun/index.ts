@@ -1,23 +1,23 @@
-import { BrowserWindow, BrowserView, type RPCSchema } from "electrobun/bun";
 import { mkdirSync } from "node:fs";
 import { hostname, release } from "node:os";
-import {
-	VirtualMouse,
-	VirtualKeyboard,
-	ensureUinputAccess,
-	uinputWritable,
-	type MouseButton,
-} from "./uinput";
+import { BrowserView, BrowserWindow, type RPCSchema } from "electrobun/bun";
+import type { SystemInfo } from "../mainview/mcp/tools";
+import type {
+	TunnelHttpRequest,
+	TunnelHttpResponse,
+} from "../mainview/mcp/tunnel-types";
 import {
 	configureLocalMcpServer,
 	startLocalMcpServer,
 	stopLocalMcpServer,
 } from "./local-mcp-server";
-import type {
-	TunnelHttpRequest,
-	TunnelHttpResponse,
-} from "../mainview/mcp/tunnel-types";
-import type { SystemInfo } from "../mainview/mcp/tools";
+import {
+	ensureUinputAccess,
+	type MouseButton,
+	uinputWritable,
+	VirtualKeyboard,
+	VirtualMouse,
+} from "./uinput";
 
 // Persistent key/value store backed by a JSON file in the user's config dir.
 // The webview's localStorage is not reliably persisted across app restarts in
@@ -61,10 +61,12 @@ async function detectScreenSize(): Promise<{ width: number; height: number }> {
 			: out.split("\n").filter((line) => line.includes(" connected"));
 		for (const line of source) {
 			const match = line.match(/(\d+)x(\d+)\+\d+\+\d+/);
-			if (match) {
+			const width = match?.[1];
+			const height = match?.[2];
+			if (width && height) {
 				return {
-					width: Number.parseInt(match[1]!, 10),
-					height: Number.parseInt(match[2]!, 10),
+					width: Number.parseInt(width, 10),
+					height: Number.parseInt(height, 10),
 				};
 			}
 		}
@@ -81,7 +83,9 @@ async function readOsRelease(): Promise<{ distro: string; version: string }> {
 		const map: Record<string, string> = {};
 		for (const line of text.split("\n")) {
 			const match = line.match(/^([A-Z0-9_]+)=(.*)$/);
-			if (match?.[1]) map[match[1]] = match[2]!.replace(/^"|"$/g, "");
+			if (match?.[1] && match[2]) {
+				map[match[1]] = match[2].replace(/^"|"$/g, "");
+			}
 		}
 		return {
 			distro: map["PRETTY_NAME"] || map["NAME"] || "",
@@ -106,7 +110,8 @@ async function gatherSystemInfo(): Promise<SystemInfo> {
 		},
 		session: {
 			type: Bun.env["XDG_SESSION_TYPE"] || "",
-			desktop: Bun.env["XDG_CURRENT_DESKTOP"] || Bun.env["DESKTOP_SESSION"] || "",
+			desktop:
+				Bun.env["XDG_CURRENT_DESKTOP"] || Bun.env["DESKTOP_SESSION"] || "",
 		},
 		hostname: hostname(),
 		keyboardLayout: "US (assumed)",
@@ -122,12 +127,15 @@ const screenSize = await detectScreenSize();
 const virtualMouse = new VirtualMouse(screenSize.width, screenSize.height);
 const virtualKeyboard = new VirtualKeyboard();
 
+// Electrobun RPC uses an empty object for parameter-less requests/messages.
+export type RpcEmptyParams = Record<string, never>;
+
 // Define RPC schema for remote input control + MCP plumbing
 export type RemoteControlMcpRPC = {
 	bun: RPCSchema<{
 		requests: {
 			getSystemInfo: {
-				params: {};
+				params: RpcEmptyParams;
 				response: SystemInfo;
 			};
 			setCaptureResolution: {
@@ -151,13 +159,13 @@ export type RemoteControlMcpRPC = {
 				};
 			};
 			getClickStatus: {
-				params: {};
+				params: RpcEmptyParams;
 				response: {
 					writable: boolean;
 				};
 			};
 			ensureClickPermission: {
-				params: {};
+				params: RpcEmptyParams;
 				response: {
 					ok: boolean;
 					changed: boolean;
@@ -195,15 +203,15 @@ export type RemoteControlMcpRPC = {
 			// Closed-circuit ("local only") transport: start/stop a local HTTP MCP
 			// listener in this Bun process instead of tunneling through the relay.
 			mcpLocalServerStart: {
-				params: {};
+				params: RpcEmptyParams;
 				response: { url: string; port: number };
 			};
 			mcpLocalServerStop: {
-				params: {};
+				params: RpcEmptyParams;
 				response: { success: boolean };
 			};
 		};
-		messages: {};
+		messages: RpcEmptyParams;
 	}>;
 	webview: RPCSchema<{
 		requests: {
@@ -214,7 +222,7 @@ export type RemoteControlMcpRPC = {
 				response: TunnelHttpResponse;
 			};
 		};
-		messages: {};
+		messages: RpcEmptyParams;
 	}>;
 };
 
@@ -279,13 +287,13 @@ const remoteControlMcpRpc = BrowserView.defineRPC<RemoteControlMcpRPC>({
 				}
 			},
 		},
-		messages: {},
+		messages: {} satisfies RpcEmptyParams,
 	},
 });
 
 // Create the main window
 // Use native renderer (WKWebView) by default, but allow overriding with CEF
-const mainWindow = new BrowserWindow({
+void new BrowserWindow({
 	title: "Remote Control MCP",
 	url: "views://mainview/index.html",
 	// Don't specify renderer to use the default (native WKWebView on macOS)
@@ -324,6 +332,4 @@ process.on("SIGINT", () => {
 });
 
 console.log("Remote Control MCP started!");
-console.log(
-	`Detected screen size: ${screenSize.width}x${screenSize.height}`,
-);
+console.log(`Detected screen size: ${screenSize.width}x${screenSize.height}`);

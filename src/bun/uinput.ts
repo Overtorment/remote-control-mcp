@@ -71,8 +71,14 @@ export async function ensureUinputAccess(): Promise<EnsureAccessResult> {
 
 const libc = dlopen("libc.so.6", {
 	open: { args: [FFIType.ptr, FFIType.i32], returns: FFIType.i32 },
-	ioctl: { args: [FFIType.i32, FFIType.u64, FFIType.u64], returns: FFIType.i32 },
-	write: { args: [FFIType.i32, FFIType.ptr, FFIType.u64], returns: FFIType.i64 },
+	ioctl: {
+		args: [FFIType.i32, FFIType.u64, FFIType.u64],
+		returns: FFIType.i32,
+	},
+	write: {
+		args: [FFIType.i32, FFIType.ptr, FFIType.u64],
+		returns: FFIType.i64,
+	},
 	close: { args: [FFIType.i32], returns: FFIType.i32 },
 });
 
@@ -80,7 +86,8 @@ const libc = dlopen("libc.so.6", {
 const _IOC = (dir: number, type: number, nr: number, size: number) =>
 	((dir << 30) | (size << 16) | (type << 8) | nr) >>> 0;
 const _IO = (type: number, nr: number) => _IOC(0, type, nr, 0);
-const _IOW = (type: number, nr: number, size: number) => _IOC(1, type, nr, size);
+const _IOW = (type: number, nr: number, size: number) =>
+	_IOC(1, type, nr, size);
 
 const UINPUT = 0x55; // 'U'
 const UI_SET_EVBIT = _IOW(UINPUT, 100, 4);
@@ -315,18 +322,56 @@ export class VirtualMouse {
 
 // Linux keycodes for letters (from input-event-codes.h).
 const LETTER_CODES: Record<string, number> = {
-	a: 30, b: 48, c: 46, d: 32, e: 18, f: 33, g: 34, h: 35, i: 23, j: 36,
-	k: 37, l: 38, m: 50, n: 49, o: 24, p: 25, q: 16, r: 19, s: 31, t: 20,
-	u: 22, v: 47, w: 17, x: 45, y: 21, z: 44,
+	a: 30,
+	b: 48,
+	c: 46,
+	d: 32,
+	e: 18,
+	f: 33,
+	g: 34,
+	h: 35,
+	i: 23,
+	j: 36,
+	k: 37,
+	l: 38,
+	m: 50,
+	n: 49,
+	o: 24,
+	p: 25,
+	q: 16,
+	r: 19,
+	s: 31,
+	t: 20,
+	u: 22,
+	v: 47,
+	w: 17,
+	x: 45,
+	y: 21,
+	z: 44,
 };
 
 // [unshifted char, shifted char, keycode] for the number row + symbols (US).
 const SYMBOL_ROWS: Array<[string, string, number]> = [
-	["1", "!", 2], ["2", "@", 3], ["3", "#", 4], ["4", "$", 5], ["5", "%", 6],
-	["6", "^", 7], ["7", "&", 8], ["8", "*", 9], ["9", "(", 10], ["0", ")", 11],
-	["-", "_", 12], ["=", "+", 13],
-	["[", "{", 26], ["]", "}", 27], [";", ":", 39], ["'", '"', 40],
-	["`", "~", 41], ["\\", "|", 43], [",", "<", 51], [".", ">", 52],
+	["1", "!", 2],
+	["2", "@", 3],
+	["3", "#", 4],
+	["4", "$", 5],
+	["5", "%", 6],
+	["6", "^", 7],
+	["7", "&", 8],
+	["8", "*", 9],
+	["9", "(", 10],
+	["0", ")", 11],
+	["-", "_", 12],
+	["=", "+", 13],
+	["[", "{", 26],
+	["]", "}", 27],
+	[";", ":", 39],
+	["'", '"', 40],
+	["`", "~", 41],
+	["\\", "|", 43],
+	[",", "<", 51],
+	[".", ">", 52],
 	["/", "?", 53],
 ];
 
@@ -350,17 +395,48 @@ const CHAR_MAP: Record<string, KeyMapEntry> = (() => {
 
 // Named keys for pressKey() (layout-independent for these).
 const NAMED_KEYS: Record<string, number> = {
-	enter: 28, return: 28, tab: 15, esc: 1, escape: 1, space: 57,
-	backspace: 14, delete: 111, del: 111,
-	up: 103, down: 108, left: 105, right: 106,
-	home: 102, end: 107, pageup: 104, pagedown: 109, insert: 110,
-	f1: 59, f2: 60, f3: 61, f4: 62, f5: 63, f6: 64,
-	f7: 65, f8: 66, f9: 67, f10: 68, f11: 87, f12: 88,
+	enter: 28,
+	return: 28,
+	tab: 15,
+	esc: 1,
+	escape: 1,
+	space: 57,
+	backspace: 14,
+	delete: 111,
+	del: 111,
+	up: 103,
+	down: 108,
+	left: 105,
+	right: 106,
+	home: 102,
+	end: 107,
+	pageup: 104,
+	pagedown: 109,
+	insert: 110,
+	f1: 59,
+	f2: 60,
+	f3: 61,
+	f4: 62,
+	f5: 63,
+	f6: 64,
+	f7: 65,
+	f8: 66,
+	f9: 67,
+	f10: 68,
+	f11: 87,
+	f12: 88,
 };
 
 const MODIFIER_KEYS: Record<string, number> = {
-	ctrl: 29, control: 29, shift: 42, alt: 56, altgr: 100,
-	meta: 125, super: 125, cmd: 125, win: 125,
+	ctrl: 29,
+	control: 29,
+	shift: 42,
+	alt: 56,
+	altgr: 100,
+	meta: 125,
+	super: 125,
+	cmd: 125,
+	win: 125,
 };
 
 const KEY_LEFTSHIFT = 42;
@@ -506,8 +582,7 @@ export class VirtualKeyboard {
 		const skipped: string[] = [];
 		const chars = [...text];
 
-		for (let i = 0; i < chars.length; i++) {
-			const char = chars[i]!;
+		for (const [i, char] of chars.entries()) {
 			const entry = CHAR_MAP[char];
 			if (!entry) {
 				skipped.push(char);
@@ -542,8 +617,9 @@ export class VirtualKeyboard {
 		if (named !== undefined) {
 			code = named;
 		} else if ([...key].length === 1 && CHAR_MAP[key]) {
-			code = CHAR_MAP[key]!.code;
-			shift = CHAR_MAP[key]!.shift;
+			const entry = CHAR_MAP[key];
+			code = entry.code;
+			shift = entry.shift;
 		} else {
 			throw new Error(`Unknown key: ${key}`);
 		}

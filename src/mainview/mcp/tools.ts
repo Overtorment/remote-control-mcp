@@ -6,8 +6,8 @@
  * screen-share stream in the webview.
  */
 
-import { z } from "zod";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import { z } from "zod";
 
 export type MouseButton = "left" | "right" | "middle";
 
@@ -78,10 +78,7 @@ function sleep(ms: number): Promise<void> {
 	return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-function screenshotResponse(
-	shot: ScreenshotResult,
-	prefix?: string,
-) {
+function screenshotResponse(shot: ScreenshotResult, prefix?: string) {
 	if (!shot.ok || !shot.base64) {
 		return errorText(shot.error || "Screenshot failed");
 	}
@@ -118,10 +115,10 @@ export function registerTools(mcp: McpServer, deps: RemoteControlDeps): void {
 			title: "Take screenshot",
 			description:
 				"Capture the currently shared screen as a JPEG (90% quality). When clicking, aim for the exact center of the target element." +
-				"Screenshots are returned inline (as base64) with the response, and can be several megabytes." + 
+				"Screenshots are returned inline (as base64) with the response, and can be several megabytes." +
 				"If you are using `mcporter` always use `--save-images <dir>` to actually save the images to a directory." +
 				"If you need to show images to the user make sure images are not outside of the allowed directory." +
-				"When providing screenshots to a model for computer vision always use `detail: \"original\"` or similar setting to provide image without any additional processing."
+				'When providing screenshots to a model for computer vision always use `detail: "original"` or similar setting to provide image without any additional processing.',
 		},
 		async () => {
 			const shot = await deps.screenshot();
@@ -136,10 +133,10 @@ export function registerTools(mcp: McpServer, deps: RemoteControlDeps): void {
 			description:
 				"Click the mouse at absolute pixel coordinates (origin top-left). Coordinates are in the same pixel space as `get_system_info`'s screen and `screenshot`. After clicking, waits 500ms and returns a screenshot (same format as the `screenshot` tool)." +
 				"Not all actions execute that quickly, so you may need to wait longer to get a screenshot of the result." +
-				"Screenshots are returned inline (as base64) with the response, and can be several megabytes." + 
+				"Screenshots are returned inline (as base64) with the response, and can be several megabytes." +
 				"If you are using `mcporter` always use `--save-images <dir>` to actually save the images to a directory." +
 				"If you need to show images to the user make sure images are not outside of the allowed directory." +
-				"When providing screenshots to a model for computer vision always use `detail: \"original\"` or similar setting to provide image without any additional processing.",
+				'When providing screenshots to a model for computer vision always use `detail: "original"` or similar setting to provide image without any additional processing.',
 			inputSchema: {
 				x: z.number().int().describe("X coordinate in pixels (0 = left edge)"),
 				y: z.number().int().describe("Y coordinate in pixels (0 = top edge)"),
@@ -157,10 +154,7 @@ export function registerTools(mcp: McpServer, deps: RemoteControlDeps): void {
 			}
 			await sleep(500);
 			const shot = await deps.screenshot();
-			return screenshotResponse(
-				shot,
-				`Clicked ${btn} at (${x}, ${y}).`,
-			);
+			return screenshotResponse(shot, `Clicked ${btn} at (${x}, ${y}).`);
 		},
 	);
 

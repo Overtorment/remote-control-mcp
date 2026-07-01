@@ -82,10 +82,15 @@ bun install          # install deps
 bun start            # electrobun dev  (run once)
 bun dev              # electrobun dev --watch  (rebuild on change)
 bun run build:canary # electrobun build --env=canary  (use to verify it compiles/bundles)
+bun run check        # biome lint + format check
+bun run check:fix    # biome auto-fix (format, imports, safe lint fixes)
+bun run lint         # biome lint only
+bun run format       # biome format --write
 ```
 
 There is **no test suite**. To verify a change compiles, run `bun run build:canary`
-(exit code 0 = good). To verify runtime behaviour end-to-end, see `smoke-mcp.sh`.
+(exit code 0 = good). Run `bun run check` for lint/format. To verify runtime
+behaviour end-to-end, see `smoke-mcp.sh`.
 
 ## The 5 MCP tools (`src/mainview/mcp/tools.ts`)
 
@@ -216,5 +221,5 @@ won't type correctly and unmapped chars are reported via `skipped`.
 - Tabs for indentation (match existing files).
 - Comments explain *why* / non-obvious intent, not *what*. Don't narrate code.
 - Native capability → Bun process behind an RPC; browser capability → webview.
-- After substantive edits, run `bun run build:canary` and check for lints.
+- After substantive edits, run `bun run check` and `bun run build:canary`.
 - Don't commit unless explicitly asked.

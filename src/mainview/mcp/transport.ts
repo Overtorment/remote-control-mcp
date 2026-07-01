@@ -49,7 +49,9 @@ let localUrl: string | null = null; // non-null iff the local listener is runnin
 const listeners = new Set<() => void>();
 
 function notify(): void {
-	listeners.forEach((fn) => fn());
+	listeners.forEach((fn) => {
+		fn();
+	});
 }
 
 /**

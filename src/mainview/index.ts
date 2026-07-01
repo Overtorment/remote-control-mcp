@@ -1,11 +1,13 @@
 import { Buffer } from "buffer";
+
 // The borrowed MCP/tunnel modules use Node's Buffer; provide it in the webview.
 (globalThis as { Buffer?: typeof Buffer }).Buffer ??= Buffer;
 
 import Electrobun, { Electroview } from "electrobun/view";
-import type { RemoteControlMcpRPC } from "../bun/index";
+import type { RemoteControlMcpRPC, RpcEmptyParams } from "../bun/index";
 import { bootstrapMcp } from "./mcp/bootstrap";
 import { handleMcpRequest } from "./mcp/mcp";
+import type { MouseButton, RemoteControlDeps } from "./mcp/tools";
 import {
 	configureTransport,
 	connectActiveTransport,
@@ -17,7 +19,6 @@ import {
 	setMcpLocalMode,
 	subscribeMcp,
 } from "./mcp/transport";
-import type { MouseButton, RemoteControlDeps } from "./mcp/tools";
 import type { IStorage } from "./mcp/tunnel-types";
 
 const rpc = Electroview.defineRPC<RemoteControlMcpRPC>({
@@ -28,11 +29,19 @@ const rpc = Electroview.defineRPC<RemoteControlMcpRPC>({
 			// MCP handler the tunnel uses. `configureMcp` runs during bootstrapMcp.
 			mcpHandleHttp: (req) => handleMcpRequest(req),
 		},
-		messages: {},
+		messages: {} satisfies RpcEmptyParams,
 	},
 });
 
 const electrobun = new Electrobun.Electroview({ rpc });
+
+function bunRpc() {
+	const client = electrobun.rpc;
+	if (!client) {
+		throw new Error("RPC client unavailable");
+	}
+	return client;
+}
 
 class ScreenCaptureApp {
 	private video: HTMLVideoElement;
@@ -126,9 +135,7 @@ class ScreenCaptureApp {
 			this.endShare("Remote stopped"),
 		);
 
-		this.simulateClickBtn.addEventListener("click", () =>
-			this.simulateClick(),
-		);
+		this.simulateClickBtn.addEventListener("click", () => this.simulateClick());
 		this.grantAccessBtn.addEventListener("click", () =>
 			this.requestClickPermission(),
 		);
@@ -150,10 +157,8 @@ class ScreenCaptureApp {
 		this.typeTextBtn.disabled = true;
 
 		try {
-			await this.runCountdown(3, "Typing", (m, e) =>
-				this.setKeyResult(m, e),
-			);
-			const result = await electrobun.rpc!.request.typeText({ text });
+			await this.runCountdown(3, "Typing", (m, e) => this.setKeyResult(m, e));
+			const result = await bunRpc().request.typeText({ text });
 			if (result.success) {
 				const skipped = result.skipped ?? [];
 				if (skipped.length > 0) {
@@ -195,7 +200,7 @@ class ScreenCaptureApp {
 			await this.runCountdown(3, `Pressing ${combo}`, (m, e) =>
 				this.setKeyResult(m, e),
 			);
-			const result = await electrobun.rpc!.request.pressKey({ key, modifiers });
+			const result = await bunRpc().request.pressKey({ key, modifiers });
 			if (result.success) {
 				this.setKeyResult(`Pressed ${combo}`, false);
 			} else {
@@ -246,7 +251,7 @@ class ScreenCaptureApp {
 	// elevation flow automatically (graphical password prompt via pkexec).
 	private async checkClickPermission() {
 		try {
-			const status = await electrobun.rpc!.request.getClickStatus({});
+			const status = await bunRpc().request.getClickStatus({});
 			if (status.writable) {
 				this.setPermissionGranted();
 			} else {
@@ -264,7 +269,7 @@ class ScreenCaptureApp {
 		this.permissionRow.classList.remove("error");
 
 		try {
-			const result = await electrobun.rpc!.request.ensureClickPermission({});
+			const result = await bunRpc().request.ensureClickPermission({});
 			if (result.ok) {
 				this.setPermissionGranted();
 			} else {
@@ -288,7 +293,7 @@ class ScreenCaptureApp {
 
 	private async loadScreenSize() {
 		try {
-			const { screen } = await electrobun.rpc!.request.getSystemInfo({});
+			const { screen } = await bunRpc().request.getSystemInfo({});
 			this.screenSizeLabel.textContent = `${screen.width} x ${screen.height}`;
 			this.clickXInput.max = String(screen.width - 1);
 			this.clickYInput.max = String(screen.height - 1);
@@ -301,10 +306,7 @@ class ScreenCaptureApp {
 	private async simulateClick() {
 		const x = Number.parseInt(this.clickXInput.value, 10);
 		const y = Number.parseInt(this.clickYInput.value, 10);
-		const button = this.clickButtonSelect.value as
-			| "left"
-			| "right"
-			| "middle";
+		const button = this.clickButtonSelect.value as "left" | "right" | "middle";
 
 		if (Number.isNaN(x) || Number.isNaN(y)) {
 			this.setClickResult("Enter valid X and Y coordinates", true);
@@ -317,7 +319,7 @@ class ScreenCaptureApp {
 			await this.runCountdown(3, `Clicking (${x}, ${y})`, (m, e) =>
 				this.setClickResult(m, e),
 			);
-			const result = await electrobun.rpc!.request.simulateClick({
+			const result = await bunRpc().request.simulateClick({
 				x,
 				y,
 				button,
@@ -344,7 +346,9 @@ class ScreenCaptureApp {
 
 	private stopStream() {
 		if (this.stream) {
-			this.stream.getTracks().forEach((track) => track.stop());
+			this.stream.getTracks().forEach((track) => {
+				track.stop();
+			});
 			this.stream = null;
 			this.video.srcObject = null;
 		}
@@ -354,11 +358,13 @@ class ScreenCaptureApp {
 		try {
 			if (
 				!navigator.mediaDevices ||
-				!(navigator.mediaDevices as MediaDevices & { getDisplayMedia?: typeof navigator.mediaDevices.getDisplayMedia }).getDisplayMedia
+				!(
+					navigator.mediaDevices as MediaDevices & {
+						getDisplayMedia?: typeof navigator.mediaDevices.getDisplayMedia;
+					}
+				).getDisplayMedia
 			) {
-				throw new Error(
-					"getDisplayMedia is not available in this browser.",
-				);
+				throw new Error("getDisplayMedia is not available in this browser.");
 			}
 
 			this.stopStream();
@@ -430,7 +436,7 @@ class ScreenCaptureApp {
 		const height = this.video.videoHeight;
 		if (!width || !height) return;
 		try {
-			await electrobun.rpc!.request.setCaptureResolution({ width, height });
+			await bunRpc().request.setCaptureResolution({ width, height });
 			this.screenSizeLabel.textContent = `${width} x ${height}`;
 			this.clickXInput.max = String(width - 1);
 			this.clickYInput.max = String(height - 1);
@@ -451,7 +457,7 @@ class ScreenCaptureApp {
 			return {
 				ok: false,
 				error:
-					"No screen share active. Click \"Select Screen & Start Remote\" in the app first.",
+					'No screen share active. Click "Select Screen & Start Remote" in the app first.',
 			};
 		}
 		try {
@@ -510,9 +516,9 @@ class McpPanel {
 		configureTransport({
 			storage: this.buildStorage(),
 			local: {
-				start: () => electrobun.rpc!.request.mcpLocalServerStart({}),
+				start: () => bunRpc().request.mcpLocalServerStart({}),
 				stop: async () => {
-					await electrobun.rpc!.request.mcpLocalServerStop({});
+					await bunRpc().request.mcpLocalServerStop({});
 				},
 			},
 		});
@@ -534,13 +540,13 @@ class McpPanel {
 
 	private buildDeps(): RemoteControlDeps {
 		return {
-			getSystemInfo: () => electrobun.rpc!.request.getSystemInfo({}),
+			getSystemInfo: () => bunRpc().request.getSystemInfo({}),
 			screenshot: () => this.app.captureScreenshotBase64(),
 			click: (x: number, y: number, button: MouseButton) =>
-				electrobun.rpc!.request.simulateClick({ x, y, button }),
-			typeText: (text: string) => electrobun.rpc!.request.typeText({ text }),
+				bunRpc().request.simulateClick({ x, y, button }),
+			typeText: (text: string) => bunRpc().request.typeText({ text }),
 			pressKey: (key: string, modifiers: string[]) =>
-				electrobun.rpc!.request.pressKey({ key, modifiers }),
+				bunRpc().request.pressKey({ key, modifiers }),
 		};
 	}
 
@@ -550,9 +556,9 @@ class McpPanel {
 	private buildStorage(): IStorage {
 		return {
 			getItem: async (key: string) =>
-				(await electrobun.rpc!.request.kvGet({ key })).value,
+				(await bunRpc().request.kvGet({ key })).value,
 			setItem: async (key: string, value: string) => {
-				await electrobun.rpc!.request.kvSet({ key, value });
+				await bunRpc().request.kvSet({ key, value });
 			},
 		};
 	}

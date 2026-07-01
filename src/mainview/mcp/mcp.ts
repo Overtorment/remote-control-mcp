@@ -9,15 +9,14 @@
  * once at app boot before any tunnel traffic arrives.
  */
 
+import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import { WebStandardStreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js";
 import {
 	DEFAULT_NEGOTIATED_PROTOCOL_VERSION,
 	isInitializeRequest,
 } from "@modelcontextprotocol/sdk/types.js";
-import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import { WebStandardStreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js";
-
-import { registerTools, type RemoteControlDeps } from "./tools";
 import { MCP_SERVER_INSTRUCTIONS } from "./instructions";
+import { type RemoteControlDeps, registerTools } from "./tools";
 import type { TunnelHttpRequest, TunnelHttpResponse } from "./tunnel-types";
 
 type McpInstance = {
@@ -151,12 +150,13 @@ function buildMcpServer(): McpServer {
 }
 
 async function createAndConnectNewMcpInstance(): Promise<McpInstance> {
-	let instance!: McpInstance;
+	const holder: { current: McpInstance | null } = { current: null };
 	const transport = new WebStandardStreamableHTTPServerTransport({
 		sessionIdGenerator: newMcpSessionId,
 		enableJsonResponse: true,
 		onsessioninitialized: (newSid: string) => {
-			mcpInstances.set(newSid, instance);
+			if (!holder.current) return;
+			mcpInstances.set(newSid, holder.current);
 			console.log(
 				`[mcp] session ${newSid.slice(0, 8)} initialized (${mcpInstances.size} active)`,
 			);
@@ -168,7 +168,8 @@ async function createAndConnectNewMcpInstance(): Promise<McpInstance> {
 		},
 	});
 	const server = buildMcpServer();
-	instance = { server, transport };
+	const instance: McpInstance = { server, transport };
+	holder.current = instance;
 	await server.connect(transport);
 	return instance;
 }

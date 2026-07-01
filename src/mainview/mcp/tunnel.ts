@@ -35,6 +35,20 @@ export type {
 	TunnelHttpResponse,
 } from "./tunnel-types";
 
+function tunnelErrorMessage(err: unknown): string {
+	return err instanceof Error ? err.message : String(err);
+}
+
+function parseTunnelWireMessage(data: string): Record<string, unknown> | null {
+	try {
+		const value: unknown = JSON.parse(data);
+		if (typeof value !== "object" || value === null) return null;
+		return value as Record<string, unknown>;
+	} catch {
+		return null;
+	}
+}
+
 const STORAGE_KEY = "@layerz/mcp-tunnel-session-id";
 /** When `'1'`, cold start calls `connect()` after `startTunnel`. Default / missing = do not connect until the user taps play. */
 const AUTOSTART_STORAGE_KEY = "@layerz/mcp-tunnel-autostart-on-launch";
@@ -108,14 +122,18 @@ function wsForTunnelReply(fallback: WebSocket): WebSocket {
 }
 
 function notifyStatus(): void {
-	statusListeners.forEach((fn) => fn());
+	statusListeners.forEach((fn) => {
+		fn();
+	});
 }
 
 export function getTunnelPublicUrl(): string | null {
 	return lastTunnelPublicUrl;
 }
 
-export function subscribeTunnelConnection(onStoreChange: () => void): () => void {
+export function subscribeTunnelConnection(
+	onStoreChange: () => void,
+): () => void {
 	statusListeners.add(onStoreChange);
 	return () => {
 		statusListeners.delete(onStoreChange);
@@ -225,7 +243,10 @@ export async function startTunnel(opts: StartTunnelOptions): Promise<void> {
 			}
 			reconnectDelayMs = RECONNECT_INITIAL_MS;
 			console.log("[tunnel] app foreground — reconnecting immediately");
-			connect(cachedBaseUrl!, cachedOpts!);
+			const baseUrl = cachedBaseUrl;
+			const connectOpts = cachedOpts;
+			if (!baseUrl || !connectOpts) return;
+			connect(baseUrl, connectOpts);
 		});
 	}
 
@@ -310,36 +331,38 @@ function connect(baseUrl: string, opts: StartTunnelOptions) {
 	};
 
 	ws.onmessage = async (ev: MessageEvent) => {
-		let msg: any;
-		try {
-			msg = JSON.parse(typeof ev.data === "string" ? ev.data : String(ev.data));
-		} catch {
-			return;
-		}
+		const msg = parseTunnelWireMessage(
+			typeof ev.data === "string" ? ev.data : String(ev.data),
+		);
+		if (!msg || typeof msg.type !== "string") return;
 
 		if (msg.type === "session_created" || msg.type === "session_resumed") {
+			const sessionId = msg.sessionId;
+			if (typeof sessionId !== "string") return;
 			const resumed = msg.type === "session_resumed";
-			const idChanged = msg.sessionId !== tunnelSessionId;
+			const idChanged = sessionId !== tunnelSessionId;
 			if (idChanged) {
-				tunnelSessionId = msg.sessionId;
+				tunnelSessionId = sessionId;
 				try {
-					await opts.storage.setItem(STORAGE_KEY, msg.sessionId);
+					await opts.storage.setItem(STORAGE_KEY, sessionId);
 				} catch (err) {
 					console.warn("[tunnel] failed to persist sessionId:", err);
 				}
 			}
+			const pendingCount = msg.pendingCount;
 			// Log only the truncated id; the full URL is a bearer credential and is
 			// delivered to the caller via `onSessionChange` instead of stdout.
 			console.log(
-				`[tunnel] ${resumed ? "resumed" : "opened"} session ${msg.sessionId.slice(0, 8)} (pendingReplayed=${msg.pendingCount ?? 0}, idChanged=${idChanged})`,
+				`[tunnel] ${resumed ? "resumed" : "opened"} session ${sessionId.slice(0, 8)} (pendingReplayed=${typeof pendingCount === "number" ? pendingCount : 0}, idChanged=${idChanged})`,
 			);
-			if (typeof msg.publicUrl === "string") {
-				lastTunnelPublicUrl = msg.publicUrl;
+			const publicUrl = msg.publicUrl;
+			if (typeof publicUrl === "string") {
+				lastTunnelPublicUrl = publicUrl;
 				notifyStatus();
 			}
 			opts.onSessionChange?.({
-				sessionId: msg.sessionId,
-				publicUrl: msg.publicUrl,
+				sessionId,
+				publicUrl: typeof publicUrl === "string" ? publicUrl : undefined,
 				resumed,
 				idChanged,
 			});
@@ -349,15 +372,15 @@ function connect(baseUrl: string, opts: StartTunnelOptions) {
 		if (msg.type === "pong") return;
 
 		if (msg.type === "http_request") {
-			const hr = msg as TunnelHttpRequest;
+			const hr = msg as unknown as TunnelHttpRequest;
 			let work = inflightTunnelByRequestId.get(hr.requestId);
 			if (!work) {
 				work = (async (): Promise<TunnelHttpResponse> => {
 					try {
 						return await opts.handleRequest(hr);
-					} catch (err: any) {
-						console.warn("[tunnel] handler error:", err?.message ?? err);
-						const body = `tunnel handler error: ${err?.message ?? err}`;
+					} catch (err: unknown) {
+						console.warn("[tunnel] handler error:", tunnelErrorMessage(err));
+						const body = `tunnel handler error: ${tunnelErrorMessage(err)}`;
 						return {
 							type: "http_response",
 							requestId: hr.requestId,
@@ -380,8 +403,8 @@ function connect(baseUrl: string, opts: StartTunnelOptions) {
 		}
 	};
 
-	ws.onerror = (err: any) => {
-		console.warn("[tunnel] ws error:", err?.message ?? err);
+	ws.onerror = () => {
+		console.warn("[tunnel] ws error");
 	};
 
 	ws.onclose = (ev: CloseEvent) => {

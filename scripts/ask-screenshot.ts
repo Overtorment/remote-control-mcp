@@ -22,7 +22,9 @@ const MIME_BY_EXT: Record<string, string> = {
 };
 
 function usage(): never {
-	console.error(`Usage: OPENAI_API_KEY=sk-... bun scripts/ask-screenshot.ts <image-path> "<prompt>"`);
+	console.error(
+		`Usage: OPENAI_API_KEY=sk-... bun scripts/ask-screenshot.ts <image-path> "<prompt>"`,
+	);
 	process.exit(1);
 }
 
