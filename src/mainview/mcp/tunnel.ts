@@ -13,8 +13,8 @@
  *     session (queue-replay any in-flight HTTP requests).
  *   - On platform "foreground" events (desktop `visibilitychange`),
  *     reconnect immediately if the socket is not open.
- *   - Autostart on cold launch is off by default; the user opts in via play, which
- *     persists `@layerz/mcp-tunnel-autostart-on-launch`. Pause clears that flag.
+ *   - The tunnel never connects on cold launch; `connectTunnel()` is driven by
+ *     screen-share consent (see `transport.ts`).
  *   - Forward each tunneled `http_request` envelope to a caller-supplied
  *     handler and ship its response back.
  *
@@ -50,8 +50,6 @@ function parseTunnelWireMessage(data: string): Record<string, unknown> | null {
 }
 
 const STORAGE_KEY = "@layerz/mcp-tunnel-session-id";
-/** When `'1'`, cold start calls `connect()` after `startTunnel`. Default / missing = do not connect until the user taps play. */
-const AUTOSTART_STORAGE_KEY = "@layerz/mcp-tunnel-autostart-on-launch";
 const DEFAULT_TUNNEL_URL = "wss://layerz.me:4433/connect";
 const PING_INTERVAL_MS = 30_000;
 const RECONNECT_INITIAL_MS = 1_000;
@@ -66,11 +64,6 @@ export type StartTunnelOptions = {
 	appLifecycle?: AppLifecycle;
 	/** Override the default tunnel URL (e.g. for tests). */
 	url?: string;
-	/**
-	 * When `false`, never auto-connect on launch even if the persisted autostart flag is `'1'`.
-	 * Defaults to honoring the stored flag.
-	 */
-	allowAutoConnect?: boolean;
 	/**
 	 * Called whenever the tunnel session id changes. The first time it fires
 	 * delivers the initial public URL; on resume the same URL is returned so
@@ -105,7 +98,6 @@ let lastTunnelPublicUrl: string | null = null;
 let manualDisconnect = false;
 let cachedBaseUrl: string | null = null;
 let cachedOpts: StartTunnelOptions | null = null;
-let cachedStorage: IStorage | null = null;
 let appLifecycleUnsub: (() => void) | null = null;
 
 /** One in-flight handler per tunnel `requestId` (server may replay while the first is still running). */
@@ -146,34 +138,10 @@ export function getTunnelConnectionStatus(): TunnelConnectionStatus {
 	return "connecting";
 }
 
-/**
- * Read the persisted "user wants tunnel on" flag — written by
- * `connectTunnel` / `disconnectTunnel`.
- */
-export async function getTunnelAutostartOnLaunch(): Promise<boolean> {
-	if (!cachedStorage) return false;
-	try {
-		return (await cachedStorage.getItem(AUTOSTART_STORAGE_KEY)) === "1";
-	} catch (err) {
-		console.warn("[tunnel] failed to read autostart preference:", err);
-		return false;
-	}
-}
-
-async function persistAutostartOnLaunch(enabled: boolean): Promise<void> {
-	if (!cachedStorage) return;
-	try {
-		await cachedStorage.setItem(AUTOSTART_STORAGE_KEY, enabled ? "1" : "0");
-	} catch (err) {
-		console.warn("[tunnel] failed to persist autostart preference:", err);
-	}
-}
-
-/** User pause: close socket, no auto-reconnect until `connectTunnel()`. Clears autostart-on-launch. */
+/** User pause: close socket, no auto-reconnect until `connectTunnel()`. */
 export async function disconnectTunnel(): Promise<void> {
 	console.log("[tunnel] user pause (disconnectTunnel)");
 	manualDisconnect = true;
-	await persistAutostartOnLaunch(false);
 	if (reconnectTimer) {
 		clearTimeout(reconnectTimer);
 		reconnectTimer = null;
@@ -192,13 +160,12 @@ export async function disconnectTunnel(): Promise<void> {
 	notifyStatus();
 }
 
-/** User resume: opt in to starting the tunnel on future app launches, then connect. */
+/** User resume: open the WebSocket (driven by screen-share consent in this app). */
 export async function connectTunnel(): Promise<void> {
 	if (!cachedBaseUrl || !cachedOpts) {
 		console.warn("[tunnel] connectTunnel: startTunnel has not run yet");
 		return;
 	}
-	await persistAutostartOnLaunch(true);
 	manualDisconnect = false;
 	started = true;
 	if (reconnectTimer) {
@@ -219,7 +186,6 @@ export async function connectTunnel(): Promise<void> {
 
 export async function startTunnel(opts: StartTunnelOptions): Promise<void> {
 	cachedOpts = opts;
-	cachedStorage = opts.storage;
 	cachedBaseUrl = opts.url ?? DEFAULT_TUNNEL_URL;
 	if (started) {
 		notifyStatus();
@@ -250,11 +216,6 @@ export async function startTunnel(opts: StartTunnelOptions): Promise<void> {
 		});
 	}
 
-	const autostart =
-		opts.allowAutoConnect === false
-			? false
-			: await getTunnelAutostartOnLaunch();
-
 	try {
 		// IStorage returns '' on miss (no `null`); coerce to null so we don't pass `?sessionId=`.
 		tunnelSessionId = (await opts.storage.getItem(STORAGE_KEY)) || null;
@@ -268,13 +229,8 @@ export async function startTunnel(opts: StartTunnelOptions): Promise<void> {
 	}
 
 	started = true;
-	manualDisconnect = !autostart;
-
-	if (autostart) {
-		connect(cachedBaseUrl, opts);
-	} else {
-		notifyStatus();
-	}
+	manualDisconnect = true;
+	notifyStatus();
 }
 
 /** Test teardown: clears session, listeners, socket. */
@@ -284,7 +240,6 @@ export function stopTunnel(): void {
 	manualDisconnect = false;
 	cachedBaseUrl = null;
 	cachedOpts = null;
-	cachedStorage = null;
 	lastTunnelPublicUrl = null;
 	if (appLifecycleUnsub) {
 		appLifecycleUnsub();

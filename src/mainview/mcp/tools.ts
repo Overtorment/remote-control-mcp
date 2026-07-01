@@ -114,10 +114,10 @@ export function registerTools(mcp: McpServer, deps: RemoteControlDeps): void {
 		{
 			title: "Take screenshot",
 			description:
-				"Capture the currently shared screen as a JPEG (90% quality). When clicking, aim for the exact center of the target element." +
-				"Screenshots are returned inline (as base64) with the response, and can be several megabytes." +
-				"If you are using `mcporter` always use `--save-images <dir>` to actually save the images to a directory." +
-				"If you need to show images to the user make sure images are not outside of the allowed directory." +
+				"Capture the currently shared screen as a JPEG (90% quality). When clicking, aim for the exact center of the target element. " +
+				"Screenshots are returned inline (as base64) with the response, and can be several megabytes. " +
+				"If you are using `mcporter` always use `--save-images <dir>` for this tool to actually save the image to a directory. " +
+				"If you need to show images to the user make sure images are not outside of the allowed directory. " +
 				'When providing screenshots to a model for computer vision always use `detail: "original"` or similar setting to provide image without any additional processing.',
 		},
 		async () => {
@@ -131,11 +131,11 @@ export function registerTools(mcp: McpServer, deps: RemoteControlDeps): void {
 		{
 			title: "Click",
 			description:
-				"Click the mouse at absolute pixel coordinates (origin top-left). Coordinates are in the same pixel space as `get_system_info`'s screen and `screenshot`. After clicking, waits 500ms and returns a screenshot (same format as the `screenshot` tool)." +
-				"Not all actions execute that quickly, so you may need to wait longer to get a screenshot of the result." +
-				"Screenshots are returned inline (as base64) with the response, and can be several megabytes." +
-				"If you are using `mcporter` always use `--save-images <dir>` to actually save the images to a directory." +
-				"If you need to show images to the user make sure images are not outside of the allowed directory." +
+				"Click the mouse at absolute pixel coordinates (origin top-left). Coordinates are in the same pixel space as `get_system_info`'s screen and `screenshot`. After clicking, waits 500ms and returns a screenshot (same format as the `screenshot` tool). " +
+				"Not all actions execute that quickly, so you may need to wait longer to get a screenshot of the result. " +
+				"Screenshots are returned inline (as base64) with the response, and can be several megabytes. " +
+				"If you are using `mcporter` always use `--save-images <dir>` for this tool to actually save the image to a directory. " +
+				"If you need to show images to the user make sure images are not outside of the allowed directory. " +
 				'When providing screenshots to a model for computer vision always use `detail: "original"` or similar setting to provide image without any additional processing.',
 			inputSchema: {
 				x: z.number().int().describe("X coordinate in pixels (0 = left edge)"),

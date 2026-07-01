@@ -1,9 +1,10 @@
 /**
  * MCP bootstrap wiring for the webview.
  *
- * Condensed equivalent of the reference's `mcp-platform.ts` + `tunnel-desktop.ts`
- * (public-tunnel path only — no local listener mode). Wires the MCP deps and
- * starts the tunnel client.
+ * Condensed equivalent of the reference's `mcp-platform.ts` + `tunnel-desktop.ts`.
+ * Wires MCP deps, starts the tunnel client (transport selection — public tunnel
+ * vs. local listener — lives in `transport.ts`), and never connects until screen
+ * share begins.
  */
 
 import { configureMcp, handleMcpRequest, resetMcpSessions } from "./mcp";
@@ -31,15 +32,12 @@ export async function bootstrapMcp(
 	if (bootstrapped) return;
 	bootstrapped = true;
 
-	configureMcp(deps, { name: "remote-control-mcp", version: "0.0.1" });
+	configureMcp(deps);
 
 	await startTunnel({
 		handleRequest: handleMcpRequest,
 		storage,
 		appLifecycle: desktopAppLifecycle,
-		// Never open the tunnel on launch — it only connects when the user grants
-		// screen-share consent via the unified "Select Screen" action.
-		allowAutoConnect: false,
 		onSessionChange: ({ publicUrl, idChanged }) => {
 			console.log("[mcp] PUBLIC URL:", publicUrl);
 			if (idChanged) resetMcpSessions();
