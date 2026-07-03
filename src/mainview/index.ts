@@ -126,7 +126,6 @@ class ScreenCaptureApp {
 		this.initializeEventListeners();
 		this.setStatus('Click "Select Screen & Start Remote" to begin', false);
 		this.loadScreenSize();
-		this.checkClickPermission();
 	}
 
 	private initializeEventListeners() {
@@ -247,22 +246,24 @@ class ScreenCaptureApp {
 		});
 	}
 
-	// Check on startup whether we can synthesize clicks. If not, trigger the
-	// elevation flow automatically (graphical password prompt via pkexec).
-	private async checkClickPermission() {
+	// Verify /dev/uinput is writable; prompt via pkexec if needed. Remote control
+	// needs input synthesis, so screen share and the MCP tunnel must not start
+	// without this.
+	private async ensureInputAccess(): Promise<boolean> {
 		try {
 			const status = await bunRpc().request.getClickStatus({});
 			if (status.writable) {
 				this.setPermissionGranted();
-			} else {
-				await this.requestClickPermission();
+				return true;
 			}
+			return await this.requestClickPermission();
 		} catch (error) {
-			console.error("Failed to check click permission:", error);
+			console.error("Failed to check input access:", error);
+			return false;
 		}
 	}
 
-	private async requestClickPermission() {
+	private async requestClickPermission(): Promise<boolean> {
 		this.permissionRow.style.display = "flex";
 		this.grantAccessBtn.disabled = true;
 		this.permissionText.textContent = "Requesting input access…";
@@ -272,16 +273,18 @@ class ScreenCaptureApp {
 			const result = await bunRpc().request.ensureClickPermission({});
 			if (result.ok) {
 				this.setPermissionGranted();
-			} else {
-				this.permissionRow.classList.add("error");
-				this.permissionText.textContent =
-					result.error || "Input access not granted";
-				this.grantAccessBtn.disabled = false;
+				return true;
 			}
+			this.permissionRow.classList.add("error");
+			this.permissionText.textContent =
+				result.error || "Input access not granted";
+			this.grantAccessBtn.disabled = false;
+			return false;
 		} catch (error) {
 			this.permissionRow.classList.add("error");
 			this.permissionText.textContent = (error as Error).message;
 			this.grantAccessBtn.disabled = false;
+			return false;
 		}
 	}
 
@@ -355,7 +358,18 @@ class ScreenCaptureApp {
 	}
 
 	private async selectScreen() {
+		let shareStarted = false;
+		this.selectScreenBtn.disabled = true;
 		try {
+			if (!(await this.ensureInputAccess())) {
+				this.setStatus(
+					"Input access required for remote control. Grant access below and try again.",
+					false,
+					true,
+				);
+				return;
+			}
+
 			if (
 				!navigator.mediaDevices ||
 				!(
@@ -394,13 +408,19 @@ class ScreenCaptureApp {
 
 			// Screen consent granted — start the remote tunnel (it's useless
 			// without screenshots, so the two are tied to one action).
+			shareStarted = true;
 			this.onShareStarted?.();
 		} catch (error) {
 			console.error("Error selecting screen:", error);
 			this.setStatus(
 				`Remote control error: ${(error as Error).message}`,
 				false,
+				true,
 			);
+		} finally {
+			if (!shareStarted) {
+				this.selectScreenBtn.disabled = false;
+			}
 		}
 	}
 
